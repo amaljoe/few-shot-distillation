@@ -1,0 +1,19 @@
+# Early-checkpoint overlay for Condition C (layerwise distillation).
+# Merged on top of base.yaml by train_layerwise_distill.py.
+#
+# Run:
+#   CUDA_VISIBLE_DEVICES=2,3 accelerate launch --num_processes 2 --mixed_precision bf16 \
+#       --main_process_port 29501 \
+#       src/training/train_layerwise_distill.py \
+#       --config configs/distill_early_ckpt.yaml \
+#       --output_dir experiments/early_checkpoints/distill
+
+training:
+  output_dir: "experiments/early_checkpoints/distill"
+  save_steps: 10        # save every 10 steps
+  max_steps: 100        # stop at step 100
+
+distillation:
+  lambda_distill: 0.5
+  layers_to_match: "all"
+  normalize_hidden: true
