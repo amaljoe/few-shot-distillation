@@ -1,0 +1,317 @@
+{
+  "model": "Qwen/Qwen3-4B-Instruct-2507",
+  "num_samples": 16,
+  "seed": 42,
+  "evaluations": {
+    "0_shot": {
+      "accuracy": 0.8125,
+      "correct": 13,
+      "total": 16,
+      "details": [
+        {
+          "question": "The girls are trying to raise money for a carnival. Kim raises $320 more than Al...",
+          "ground_truth": "2280",
+          "prediction": "2180",
+          "correct": false
+        },
+        {
+          "question": "Kalinda is working on a 360 piece puzzle with her mom. Kalinda can normally add ...",
+          "ground_truth": "1",
+          "prediction": "1",
+          "correct": true
+        },
+        {
+          "question": "Tom's ship can travel at 10 miles per hour.  He is sailing from 1 to 4 PM.  He t...",
+          "ground_truth": "5",
+          "prediction": "5",
+          "correct": true
+        },
+        {
+          "question": "James decides to buy birthday candles for his 2 sons.  One of them is 12 and the...",
+          "ground_truth": "12",
+          "prediction": "12",
+          "correct": true
+        },
+        {
+          "question": "Mariah\u2019s grandma was teaching her to knit. Mariah used 1/4 of a skein of yarn. H...",
+          "ground_truth": "273",
+          "prediction": "273",
+          "correct": true
+        },
+        {
+          "question": "While playing with her friends in their school playground, Katelyn saw 50 fairie...",
+          "ground_truth": "45",
+          "prediction": "45",
+          "correct": true
+        },
+        {
+          "question": "If Ann is 9 years old and her brother is twice her age, how old will her brother...",
+          "ground_truth": "21",
+          "prediction": "21",
+          "correct": true
+        },
+        {
+          "question": "Twenty dozen cups cost $1200 less than the total cost of half a dozen plates sol...",
+          "ground_truth": "145",
+          "prediction": "34800",
+          "correct": false
+        },
+        {
+          "question": "Last year there were 50 students enrolled in a calligraphy class. This year, the...",
+          "ground_truth": "60",
+          "prediction": "60",
+          "correct": true
+        },
+        {
+          "question": "Rani has ten more crabs than Monic, who has 4 fewer crabs than Bo. If Bo has 40 ...",
+          "ground_truth": "122",
+          "prediction": "122",
+          "correct": true
+        },
+        {
+          "question": "Brian's basement was damp and musty, so he bought a dehumidifier to remove moist...",
+          "ground_truth": "29",
+          "prediction": "29",
+          "correct": true
+        },
+        {
+          "question": "George, a grade six teacher, ordered 600 burritos for the sixth-grade class picn...",
+          "ground_truth": "80",
+          "prediction": "80",
+          "correct": true
+        },
+        {
+          "question": "Jim spends 2 hours watching TV and then decides to go to bed and reads for half ...",
+          "ground_truth": "36",
+          "prediction": "4",
+          "correct": false
+        },
+        {
+          "question": "Janet buys a brooch for her daughter.  She pays $500 for the material to make it...",
+          "ground_truth": "1430",
+          "prediction": "1430",
+          "correct": true
+        },
+        {
+          "question": "Ducks need to eat 3.5 pounds of insects each week to survive. If there is a floc...",
+          "ground_truth": "5",
+          "prediction": "5",
+          "correct": true
+        },
+        {
+          "question": "Joey has 214 points before his turn in Scrabble. He scores 26 points. Then Marcy...",
+          "ground_truth": "5",
+          "prediction": "5",
+          "correct": true
+        }
+      ]
+    },
+    "4_shot": {
+      "accuracy": 0.9375,
+      "correct": 15,
+      "total": 16,
+      "details": [
+        {
+          "question": "The girls are trying to raise money for a carnival. Kim raises $320 more than Al...",
+          "ground_truth": "2280",
+          "prediction": "180",
+          "correct": false
+        },
+        {
+          "question": "Kalinda is working on a 360 piece puzzle with her mom. Kalinda can normally add ...",
+          "ground_truth": "1",
+          "prediction": "1",
+          "correct": true
+        },
+        {
+          "question": "Tom's ship can travel at 10 miles per hour.  He is sailing from 1 to 4 PM.  He t...",
+          "ground_truth": "5",
+          "prediction": "5",
+          "correct": true
+        },
+        {
+          "question": "James decides to buy birthday candles for his 2 sons.  One of them is 12 and the...",
+          "ground_truth": "12",
+          "prediction": "12",
+          "correct": true
+        },
+        {
+          "question": "Mariah\u2019s grandma was teaching her to knit. Mariah used 1/4 of a skein of yarn. H...",
+          "ground_truth": "273",
+          "prediction": "273",
+          "correct": true
+        },
+        {
+          "question": "While playing with her friends in their school playground, Katelyn saw 50 fairie...",
+          "ground_truth": "45",
+          "prediction": "45",
+          "correct": true
+        },
+        {
+          "question": "If Ann is 9 years old and her brother is twice her age, how old will her brother...",
+          "ground_truth": "21",
+          "prediction": "21",
+          "correct": true
+        },
+        {
+          "question": "Twenty dozen cups cost $1200 less than the total cost of half a dozen plates sol...",
+          "ground_truth": "145",
+          "prediction": "145",
+          "correct": true
+        },
+        {
+          "question": "Last year there were 50 students enrolled in a calligraphy class. This year, the...",
+          "ground_truth": "60",
+          "prediction": "60",
+          "correct": true
+        },
+        {
+          "question": "Rani has ten more crabs than Monic, who has 4 fewer crabs than Bo. If Bo has 40 ...",
+          "ground_truth": "122",
+          "prediction": "122",
+          "correct": true
+        },
+        {
+          "question": "Brian's basement was damp and musty, so he bought a dehumidifier to remove moist...",
+          "ground_truth": "29",
+          "prediction": "29",
+          "correct": true
+        },
+        {
+          "question": "George, a grade six teacher, ordered 600 burritos for the sixth-grade class picn...",
+          "ground_truth": "80",
+          "prediction": "80",
+          "correct": true
+        },
+        {
+          "question": "Jim spends 2 hours watching TV and then decides to go to bed and reads for half ...",
+          "ground_truth": "36",
+          "prediction": "36",
+          "correct": true
+        },
+        {
+          "question": "Janet buys a brooch for her daughter.  She pays $500 for the material to make it...",
+          "ground_truth": "1430",
+          "prediction": "1430",
+          "correct": true
+        },
+        {
+          "question": "Ducks need to eat 3.5 pounds of insects each week to survive. If there is a floc...",
+          "ground_truth": "5",
+          "prediction": "5",
+          "correct": true
+        },
+        {
+          "question": "Joey has 214 points before his turn in Scrabble. He scores 26 points. Then Marcy...",
+          "ground_truth": "5",
+          "prediction": "5",
+          "correct": true
+        }
+      ]
+    },
+    "8_shot": {
+      "accuracy": 0.9375,
+      "correct": 15,
+      "total": 16,
+      "details": [
+        {
+          "question": "The girls are trying to raise money for a carnival. Kim raises $320 more than Al...",
+          "ground_truth": "2280",
+          "prediction": "2180",
+          "correct": false
+        },
+        {
+          "question": "Kalinda is working on a 360 piece puzzle with her mom. Kalinda can normally add ...",
+          "ground_truth": "1",
+          "prediction": "1",
+          "correct": true
+        },
+        {
+          "question": "Tom's ship can travel at 10 miles per hour.  He is sailing from 1 to 4 PM.  He t...",
+          "ground_truth": "5",
+          "prediction": "5",
+          "correct": true
+        },
+        {
+          "question": "James decides to buy birthday candles for his 2 sons.  One of them is 12 and the...",
+          "ground_truth": "12",
+          "prediction": "12",
+          "correct": true
+        },
+        {
+          "question": "Mariah\u2019s grandma was teaching her to knit. Mariah used 1/4 of a skein of yarn. H...",
+          "ground_truth": "273",
+          "prediction": "273",
+          "correct": true
+        },
+        {
+          "question": "While playing with her friends in their school playground, Katelyn saw 50 fairie...",
+          "ground_truth": "45",
+          "prediction": "45",
+          "correct": true
+        },
+        {
+          "question": "If Ann is 9 years old and her brother is twice her age, how old will her brother...",
+          "ground_truth": "21",
+          "prediction": "21",
+          "correct": true
+        },
+        {
+          "question": "Twenty dozen cups cost $1200 less than the total cost of half a dozen plates sol...",
+          "ground_truth": "145",
+          "prediction": "145",
+          "correct": true
+        },
+        {
+          "question": "Last year there were 50 students enrolled in a calligraphy class. This year, the...",
+          "ground_truth": "60",
+          "prediction": "60",
+          "correct": true
+        },
+        {
+          "question": "Rani has ten more crabs than Monic, who has 4 fewer crabs than Bo. If Bo has 40 ...",
+          "ground_truth": "122",
+          "prediction": "122",
+          "correct": true
+        },
+        {
+          "question": "Brian's basement was damp and musty, so he bought a dehumidifier to remove moist...",
+          "ground_truth": "29",
+          "prediction": "29",
+          "correct": true
+        },
+        {
+          "question": "George, a grade six teacher, ordered 600 burritos for the sixth-grade class picn...",
+          "ground_truth": "80",
+          "prediction": "80",
+          "correct": true
+        },
+        {
+          "question": "Jim spends 2 hours watching TV and then decides to go to bed and reads for half ...",
+          "ground_truth": "36",
+          "prediction": "36",
+          "correct": true
+        },
+        {
+          "question": "Janet buys a brooch for her daughter.  She pays $500 for the material to make it...",
+          "ground_truth": "1430",
+          "prediction": "1430",
+          "correct": true
+        },
+        {
+          "question": "Ducks need to eat 3.5 pounds of insects each week to survive. If there is a floc...",
+          "ground_truth": "5",
+          "prediction": "5",
+          "correct": true
+        },
+        {
+          "question": "Joey has 214 points before his turn in Scrabble. He scores 26 points. Then Marcy...",
+          "ground_truth": "5",
+          "prediction": "5",
+          "correct": true
+        }
+      ]
+    }
+  },
+  "icl_gap": 0.125
+}

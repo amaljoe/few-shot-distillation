@@ -1,0 +1,56 @@
+# Base configuration for Few-Shot Distillation POC
+# Phase 0 result: Qwen3-1.7B selected (12.5% ICL gap: 50% 0-shot → 62.5% 8-shot)
+
+model:
+  name: "Qwen/Qwen3-1.7B"          # Selected by Phase 0 eval (smallest with ≥5% ICL gap)
+  num_layers: 28                    # Qwen3-1.7B=28 layers
+  hidden_size: 1536                 # Qwen3-1.7B hidden size
+  thinking_mode: false              # Always false — thinking tokens break answer extraction
+
+data:
+  dataset: "gsm8k"
+  subset: "main"
+  train_split: "train"
+  test_split: "test"
+  num_fewshot_examples: 8
+  max_seq_len_teacher: 4096         # 8 QA pairs + query (needs 4096 to fit)
+  max_seq_len_student: 512          # query only
+  num_workers: 4
+
+training:
+  seed: 42
+  output_dir: "experiments/poc"
+  logging_steps: 10
+  eval_steps: 100
+  save_steps: 200
+  max_steps: 1000
+  warmup_steps: 50
+  lr: 2.0e-4
+  weight_decay: 0.01
+  grad_clip: 1.0
+  per_device_train_batch_size: 4
+  gradient_accumulation_steps: 4   # effective batch = 64 across 4 GPUs
+  bf16: true
+  gradient_checkpointing: false    # enable if OOM during distillation training
+
+lora:
+  r: 16
+  alpha: 32
+  dropout: 0.05
+  target_modules:
+    - q_proj
+    - k_proj
+    - v_proj
+    - o_proj
+    - gate_proj
+    - up_proj
+    - down_proj
+  bias: "none"
+
+teacher_activations:
+  cache_dir: "experiments/poc/teacher_cache"
+  dtype: "float16"
+  # Storage estimate:
+  #   2B (28 layers × 1536 hidden): ~86KB/example → ~640MB for 7473 train examples
+  #   4B (36 layers × 2560 hidden): ~185KB/example → ~1.4GB
+  #   8B (36 layers × 4096 hidden): ~295KB/example → ~2.2GB

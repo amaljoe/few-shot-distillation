@@ -1,0 +1,10 @@
+# Distillation configuration — extends base.yaml
+# Run: train_layerwise_distill.py --config configs/distill_layerwise.yaml
+
+defaults:
+  - base
+
+distillation:
+  lambda_distill: 0.5        # weight of layer-matching loss vs CE loss
+  layers_to_match: "all"     # "all" or list of ints, e.g. [20, 21, 22, 23, 24, 25, 26, 27]
+  normalize_hidden: true     # L2-normalize before MSE (removes scale mismatch between teacher/student)
