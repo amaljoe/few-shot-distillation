@@ -4,7 +4,7 @@
 model:
   name: "Qwen/Qwen3-1.7B"          # Selected by Phase 0 eval (smallest with ≥5% ICL gap)
   num_layers: 28                    # Qwen3-1.7B=28 layers
-  hidden_size: 1536                 # Qwen3-1.7B hidden size
+  hidden_size: 2048                 # Qwen3-1.7B hidden size (confirmed from activations.pt shape)
   thinking_mode: false              # Always false — thinking tokens break answer extraction
 
 data:

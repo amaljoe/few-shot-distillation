@@ -182,15 +182,12 @@ def main():
             t_states = teacher_cache[example_idx].permute(1, 0, 2)
             t_states = t_states.to(accelerator.device)  # move to GPU
 
-            # Student alignment: last non-padding token in student input
-            # (last token of the question prompt, before answer generation)
-            pad_id = tokenizer.pad_token_id or tokenizer.eos_token_id
-            student_last_pos = student_wrapper.capture.get_last_nonpad_pos(
-                batch.student_input_ids, pad_id
-            )
+            # Student alignment: last token of question prompt (before answer generation)
+            # Uses pre-computed student_query_pos from the batch (same structure as teacher)
+            student_query_pos = batch.student_query_pos.to(accelerator.device)
 
             # Get student hidden states at alignment positions
-            s_states = student_wrapper.get_hidden_states(student_last_pos)  # (L, B, H)
+            s_states = student_wrapper.get_hidden_states(student_query_pos)  # (L, B, H)
 
             # Distillation loss
             dist_loss = layer_matching_loss(

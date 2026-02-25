@@ -1,0 +1,38 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+dist/
+build/
+*.egg
+
+# Experiments (large files)
+experiments/
+*.pt
+*.bin
+*.safetensors
+
+# Logs
+*.log
+tb_logs/
+runs/
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# OS
+.DS_Store
+*.swp
+*.swo
+
+# Editor
+.vscode/
+.idea/
+
+# HuggingFace cache
+.cache/
+
+# Environment
+.env

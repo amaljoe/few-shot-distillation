@@ -104,6 +104,7 @@ class GSM8KBatch:
     teacher_query_pos: torch.Tensor       # (B,) — alignment token index per example
     student_input_ids: torch.Tensor       # (B, T_stud)
     student_attention_mask: torch.Tensor  # (B, T_stud)
+    student_query_pos: torch.Tensor       # (B,) — alignment token index in student sequence
     labels: torch.Tensor                  # (B, T_stud) — -100 on prompt, answer tokens otherwise
     example_idx: torch.Tensor             # (B,) — original dataset index for cache lookup
 
@@ -228,12 +229,20 @@ class GSM8KDistillDataset(Dataset):
         # Pad/truncate labels to full_ids length
         labels = labels[:len(full_ids)]
 
+        # Student alignment position: last token of the question prompt (before answer).
+        # Same structural position as teacher_query_pos — just before gen_prompt tokens.
+        # prompt_len - gen_prompt_len - 1 = last token of student question
+        student_query_pos = find_last_user_token_pos(
+            student_ids, self.tokenizer, self.gen_prompt_len
+        )
+
         return {
             "teacher_input_ids": teacher_ids,
             "teacher_attention_mask": teacher_mask,
             "teacher_query_pos": teacher_query_pos,
             "student_input_ids": full_ids,       # full sequence for CE loss
             "student_attention_mask": full_enc["attention_mask"],
+            "student_query_pos": student_query_pos,  # alignment position in student sequence
             "labels": labels,
             "example_idx": idx,
         }
@@ -259,6 +268,7 @@ def collate_fn(batch: list[dict], pad_token_id: int) -> GSM8KBatch:
         teacher_query_pos=torch.tensor([b["teacher_query_pos"] for b in batch], dtype=torch.long),
         student_input_ids=student_ids,
         student_attention_mask=student_mask,
+        student_query_pos=torch.tensor([b["student_query_pos"] for b in batch], dtype=torch.long),
         labels=labels,
         example_idx=torch.tensor([b["example_idx"] for b in batch], dtype=torch.long),
     )
