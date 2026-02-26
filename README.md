@@ -31,8 +31,8 @@ L_total = L_CE  +  λ * Σ_l || h_l(student) − h_l(teacher) ||²
 
 ## Experimental Setup
 
-**Model:** Qwen/Qwen3-1.7B · **Dataset:** GSM8K · **Adapter:** LoRA r=16 α=32
-**Training:** 1000 steps · effective batch 32 · lr 2e-4 · bf16 · 4×A100 80GB
+**Models:** Qwen/Qwen3-1.7B (primary), Qwen/Qwen3-8B (scale-up) · **Dataset:** GSM8K
+**Adapter:** LoRA r=16 α=32 · **Training:** 1000 steps · effective batch 32 · lr 2e-4 · bf16 · 4×A100 80GB
 
 ### Phase 0 — Model Selection (ICL Gap)
 
@@ -52,8 +52,11 @@ Qwen3-1.7B selected: smallest model with ≥5pp ICL gap and non-trivial 0-shot f
 |-----------|-------------|
 | A | 8-shot inference — teacher baseline, no fine-tuning |
 | B | Zero-shot LoRA SFT — standard fine-tuning, no distillation |
-| C | Layer-wise distillation — LoRA SFT + hidden-state matching (all 28 layers, λ=0.5) |
+| C | Layer-wise distillation — LoRA SFT + hidden-state matching (all layers, λ=0.5) |
 | D | Logit-level KL distillation — LoRA SFT + KL on output logits (λ=0.5, T=2) |
+
+All conditions run on both **Qwen3-1.7B** (28 layers, 2048 hidden) and
+**Qwen3-8B** (36 layers, 4096 hidden) to test scalability of the distillation signal.
 
 ---
 
@@ -61,7 +64,9 @@ Qwen3-1.7B selected: smallest model with ≥5pp ICL gap and non-trivial 0-shot f
 
 All fine-tuned conditions evaluated zero-shot on the **full GSM8K test set (1319 examples)**.
 
-### Main Comparison
+### Qwen3-1.7B Results
+
+#### Main Comparison
 
 | Condition | Accuracy | Correct / Total | vs 8-shot teacher |
 |-----------|----------|-----------------|-------------------|
@@ -118,6 +123,54 @@ Distillation leads at **all 5 full-training checkpoints** (average gap: **+1.27p
 The early phase is dominated by format learning (both conditions behave identically at
 step 10); the distillation advantage materialises once the LR enters cosine decay.
 
+---
+
+### Qwen3-8B Results
+
+Same experimental protocol on the 8B base model (36 layers, hidden 4096),
+run overnight via `scripts/run_8b_overnight.sh` on 4×A100 80GB.
+
+**Phase 0 ICL gap (16 samples):** 0-shot 18.8% → 8-shot 68.8% (+50.0pp gap).
+
+#### Checkpoint Accuracy Curve — Qwen3-8B
+
+**Early phase (steps 10–100):**
+
+| Step | Baseline | Distill C | Δ | Note |
+|------|----------|-----------|---|------|
+| 10 | 78.92% | 79.23% | +0.30pp | format-learn spike |
+| 20 | 77.56% | 74.83% | −2.73pp | warmup crash |
+| 30 | 80.74% | 80.29% | −0.46pp | recovery |
+| 40 | 83.09% | 82.49% | −0.61pp | — |
+| 50 | 83.01% | 83.17% | +0.15pp | — |
+| 60 | 82.11% | 82.87% | +0.76pp | — |
+| 70 | 81.58% | 80.89% | −0.68pp | — |
+| 80 | 82.11% | **84.61%** | **+2.50pp** | distill surges |
+| 90 | 81.43% | **83.85%** | **+2.43pp** | — |
+| 100 | 81.50% | **83.47%** | **+1.97pp** | — |
+
+**Full training (steps 200–1000):**
+
+| Step | Baseline | Distill C | Δ |
+|------|----------|-----------|---|
+| 200 | 82.03% | 81.58% | −0.45pp |
+| 300 | **83.78%** | 81.88% | −1.90pp |
+| 400 | **83.24%** | 82.79% | −0.45pp |
+| 500 | **83.24%** | 82.94% | −0.30pp |
+| 600 | 81.43% | 81.80% | +0.38pp |
+| 700 | 80.36% | 80.89% | +0.53pp |
+| 800 | **80.67%** | 79.76% | −0.91pp |
+| 900 | **81.35%** | 79.15% | −2.20pp |
+| 1000 | **80.14%** | 78.47% | −1.67pp |
+
+**Divergent finding:** distillation helps the 8B model during early training (steps 80–100,
++1.97–2.50pp advantage) but then gradually degrades. By step 1000 the baseline leads
+by **1.67pp** and the distilled model's accuracy has dropped 5pp from its step-80 peak.
+Baseline leads at 6 of 9 full-training checkpoints. Compare to 1.7B where distillation
+leads at **all 5** full-training checkpoints (+1.27pp average).
+
+---
+
 ### Key Observations
 
 1. **Distillation works.** C (+1.21pp) and D (+0.68pp) both outperform the baseline.
@@ -137,6 +190,14 @@ step 10); the distillation advantage materialises once the LR enters cosine deca
    at step 800). The early phase (steps 10–100) is noisy and dominated by format learning;
    the distillation advantage materialises once LR enters cosine decay (~step 200).
 
+5. **Distillation does not scale straightforwardly to larger models.** On Qwen3-8B the
+   distillation signal helps early (steps 80–100, +2.5pp) but then over-regularizes the
+   model — accuracy degrades to 78.47% at step 1000 vs 80.14% baseline. The 8B model has
+   a much larger ICL gap (50pp vs 12.5pp for 1.7B), suggesting the teacher's 8-shot
+   activations impose a representation constraint that a stronger base model cannot escape
+   under extended training. The distillation loss may need down-weighting (λ < 0.5) or
+   layer-selection for larger models.
+
 ---
 
 ## Figures
@@ -149,7 +210,7 @@ CE loss for Condition B (baseline) and C (distillation) over 1000 steps.
 Distillation runs at slightly higher CE loss in early training (the MSE term trades off
 against pure task loss), but both converge to similar final CE values.
 
-### Eval Accuracy vs Training Step
+### Eval Accuracy vs Training Step — Qwen3-1.7B
 
 ![Accuracy curve](experiments/figures/accuracy_curve.png)
 
@@ -162,6 +223,19 @@ Three phases:
 - **Steps 20–100**: Noisy recovery from warmup disruption
 - **Steps 200–1000**: Distillation consistently ahead (+1.27pp avg)
 
+### Eval Accuracy vs Training Step — Qwen3-8B
+
+![8B Accuracy curve](experiments/figures/8b/accuracy_curve.png)
+
+GSM8K accuracy (full test set, 1319 examples) at checkpoints 10–100 (early run) and
+100–1000 (full run). Distillation surges ahead at steps 80–100 (+2.5pp), then degrades
+steadily through extended training. Baseline (blue) finishes at 80.14%; distillation
+(pink) at 78.47%.
+
+### Qwen3-8B Training Loss
+
+![8B Loss curve](experiments/figures/8b/loss_curve.png)
+
 ---
 
 ## Ablations
@@ -169,7 +243,7 @@ Three phases:
 Full results in `experiments/ablations/` · Analysis in `experiments/ablations/analysis.md`
 
 ```
-experiments/ablations/
+experiments/ablations/             # 1.7B ablations
 ├── checkpoint_curve/
 │   ├── results_early.json          # B vs C at steps 10/20/.../100 (1319 examples)
 │   └── results_full.json           # B vs C at steps 200/400/.../1000 (1319 examples)
@@ -179,9 +253,17 @@ experiments/ablations/
 ├── summary.json                    # Aggregated results
 └── analysis.md                     # Full written analysis
 
+experiments/ablations_8b/          # 8B scale-up
+└── checkpoint_curve/
+    ├── results_early.json          # B vs C at steps 10/20/.../100 (1319 examples)
+    └── results_full.json           # B vs C at steps 100/200/.../1000 (1319 examples)
+
 experiments/figures/
-├── loss_curve.png                  # Training CE loss — B vs C
-└── accuracy_curve.png              # Eval accuracy steps 10–1000 — B vs C
+├── loss_curve.png                  # 1.7B training CE loss — B vs C
+├── accuracy_curve.png              # 1.7B eval accuracy steps 10–1000 — B vs C
+└── 8b/
+    ├── loss_curve.png              # 8B training CE loss — B vs C
+    └── accuracy_curve.png          # 8B eval accuracy steps 10–1000 — B vs C
 ```
 
 ---
@@ -190,8 +272,14 @@ experiments/figures/
 
 ```
 configs/
-├── base.yaml                  # Model, data, training, LoRA hyperparameters
-└── distill_layerwise.yaml     # Distillation overrides (λ, layers, normalize)
+├── base.yaml                  # 1.7B: model, data, training, LoRA hyperparameters
+├── distill_layerwise.yaml     # 1.7B: distillation overrides (λ, layers, normalize)
+├── early_ckpt.yaml            # 1.7B: early checkpoint run (steps 0-100, save every 10)
+├── distill_early_ckpt.yaml    # 1.7B: early checkpoint distillation overlay
+├── base_8b.yaml               # 8B: full config for Condition B
+├── distill_8b.yaml            # 8B: distillation overlay for Condition C
+├── early_ckpt_8b.yaml         # 8B: early checkpoint run
+└── distill_early_ckpt_8b.yaml # 8B: early checkpoint distillation overlay
 
 src/
 ├── data/
@@ -215,8 +303,9 @@ scripts/
 ├── evaluate.py                       # Final eval via vLLM server + LoRA adapters
 ├── eval_checkpoints.py               # Checkpoint accuracy curve (vLLM offline + LoRA)
 ├── eval_adapter.py                   # Single-shot adapter eval (vLLM offline)
-├── run_ablations.sh                  # End-to-end ablation suite runner
-└── plot_curves.py                    # Generate loss + accuracy figures from TB logs + JSONs
+├── run_ablations.sh                  # End-to-end 1.7B ablation suite runner
+├── run_8b_overnight.sh               # End-to-end 8B overnight experiment (all 6 steps)
+└── plot_curves.py                    # Generate loss + accuracy figures (supports --model_tag)
 
 experiments/poc/
 ├── teacher_cache/
@@ -312,7 +401,7 @@ python scripts/evaluate.py \
     --output experiments/poc/final_results.json
 ```
 
-### Step 5 — Run full ablation suite
+### Step 5 — Run full ablation suite (1.7B)
 
 ```bash
 bash scripts/run_ablations.sh 2>&1 | tee experiments/ablations/run.log
@@ -320,6 +409,17 @@ bash scripts/run_ablations.sh 2>&1 | tee experiments/ablations/run.log
 
 Runs checkpoint curves, Condition D, and lambda sweep end-to-end with ingrained eval.
 Results aggregated to `experiments/ablations/summary.json`.
+
+### Step 6 — Run 8B scale-up overnight
+
+```bash
+# Inside apptainer tmux session on cn14-dgx:
+bash scripts/run_8b_overnight.sh 2>&1 | tee experiments/8b/overnight.log
+```
+
+Runs 6 steps end-to-end: precompute activations → early train → early eval →
+full train → full eval → generate figures. Skip guards allow safe resume if interrupted.
+Expected runtime: ~3–4 hours on 4×A100 80GB.
 
 ### TensorBoard
 

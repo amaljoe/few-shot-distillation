@@ -1,0 +1,51 @@
+# Early-checkpoint config for Qwen3-8B Condition B — save every 10 steps for first 100.
+
+model:
+  name: "Qwen/Qwen3-8B"
+  num_layers: 36
+  hidden_size: 4096
+  thinking_mode: false
+
+data:
+  dataset: "gsm8k"
+  subset: "main"
+  train_split: "train"
+  test_split: "test"
+  num_fewshot_examples: 8
+  max_seq_len_teacher: 4096
+  max_seq_len_student: 512
+  num_workers: 4
+
+training:
+  seed: 42
+  output_dir: "experiments/8b/early_checkpoints/baseline"
+  logging_steps: 10
+  eval_steps: 100
+  save_steps: 10
+  max_steps: 100
+  warmup_steps: 50
+  lr: 2.0e-4
+  weight_decay: 0.01
+  grad_clip: 1.0
+  per_device_train_batch_size: 4
+  gradient_accumulation_steps: 4
+  bf16: true
+  gradient_checkpointing: false
+
+lora:
+  r: 16
+  alpha: 32
+  dropout: 0.05
+  target_modules:
+    - q_proj
+    - k_proj
+    - v_proj
+    - o_proj
+    - gate_proj
+    - up_proj
+    - down_proj
+  bias: "none"
+
+teacher_activations:
+  cache_dir: "experiments/8b/teacher_cache"
+  dtype: "float16"

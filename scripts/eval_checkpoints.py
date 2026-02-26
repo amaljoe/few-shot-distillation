@@ -44,6 +44,8 @@ def parse_args():
     parser.add_argument("--output", type=str,
                         default="experiments/ablations/checkpoint_curve/results.json")
     parser.add_argument("--max_new_tokens", type=int, default=512)
+    parser.add_argument("--max_model_len", type=int, default=2048,
+                        help="vLLM max_model_len (context window cap)")
     parser.add_argument("--tensor_parallel_size", type=int, default=2)
     return parser.parse_args()
 
@@ -130,7 +132,7 @@ def main():
         model=cfg.model.name,
         enable_lora=True,
         max_lora_rank=cfg.lora.r,
-        max_model_len=2048,
+        max_model_len=args.max_model_len,
         tensor_parallel_size=args.tensor_parallel_size,
         dtype="bfloat16",
         trust_remote_code=True,
