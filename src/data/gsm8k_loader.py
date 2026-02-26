@@ -115,6 +115,12 @@ class GSM8KDistillDataset(Dataset):
 
     For each item, the few-shot examples are sampled deterministically from
     the training pool using a fixed seed + example index (reproducible).
+
+    teacher_include_answer (bool): when True the teacher sequence includes the
+        ground-truth answer, so it ends with the same token IDs as the student
+        sequence.  Required for online distillation (V1 / V2) where alignment
+        is done on answer-token positions.  Old precompute-based scripts leave
+        this False (default) and the teacher ends with the generation prompt.
     """
 
     def __init__(
@@ -125,6 +131,7 @@ class GSM8KDistillDataset(Dataset):
         max_seq_len_teacher: int = 1536,
         max_seq_len_student: int = 512,
         seed: int = 42,
+        teacher_include_answer: bool = False,
     ):
         self.dataset = dataset
         self.tokenizer = tokenizer
@@ -132,6 +139,7 @@ class GSM8KDistillDataset(Dataset):
         self.max_seq_len_teacher = max_seq_len_teacher
         self.max_seq_len_student = max_seq_len_student
         self.seed = seed
+        self.teacher_include_answer = teacher_include_answer
 
         # Pre-compute generation prompt length for alignment
         # The generation prompt is the part added by add_generation_prompt=True
@@ -164,7 +172,41 @@ class GSM8KDistillDataset(Dataset):
 
         # --- Teacher input ---
         teacher_messages = build_fewshot_messages(fewshot_examples, example)
-        teacher_prompt = apply_chat_template_no_think(self.tokenizer, teacher_messages)
+
+        if self.teacher_include_answer:
+            # Online distillation mode: include ground-truth answer in teacher sequence.
+            # Teacher ends with the same token IDs as student so that the last
+            # n_ans tokens of teacher content align with student answer tokens.
+            teacher_messages_with_ans = teacher_messages + [
+                {"role": "assistant", "content": example["answer"]}
+            ]
+            try:
+                teacher_prompt = self.tokenizer.apply_chat_template(
+                    teacher_messages_with_ans,
+                    tokenize=False,
+                    add_generation_prompt=False,
+                    chat_template_kwargs={"enable_thinking": False},
+                )
+            except TypeError:
+                teacher_prompt = self.tokenizer.apply_chat_template(
+                    teacher_messages_with_ans,
+                    tokenize=False,
+                    add_generation_prompt=False,
+                )
+            teacher_query_pos = 0  # not used by online training scripts
+        else:
+            teacher_prompt = apply_chat_template_no_think(self.tokenizer, teacher_messages)
+            teacher_enc_tmp = self.tokenizer(
+                teacher_prompt,
+                truncation=True,
+                max_length=self.max_seq_len_teacher,
+                return_tensors=None,
+                add_special_tokens=False,
+            )
+            teacher_query_pos = find_last_user_token_pos(
+                teacher_enc_tmp["input_ids"], self.tokenizer, self.gen_prompt_len
+            )
+
         teacher_enc = self.tokenizer(
             teacher_prompt,
             truncation=True,
@@ -174,11 +216,6 @@ class GSM8KDistillDataset(Dataset):
         )
         teacher_ids = teacher_enc["input_ids"]
         teacher_mask = teacher_enc["attention_mask"]
-
-        # Alignment position: last token of target question = position just before gen prompt
-        teacher_query_pos = find_last_user_token_pos(
-            teacher_ids, self.tokenizer, self.gen_prompt_len
-        )
 
         # --- Student input ---
         student_messages = build_student_messages(example)
@@ -284,6 +321,7 @@ def make_dataloader(
     shuffle: bool = True,
     num_workers: int = 4,
     seed: int = 42,
+    teacher_include_answer: bool = False,
 ) -> torch.utils.data.DataLoader:
     ds = GSM8KDistillDataset(
         dataset=dataset,
@@ -292,6 +330,7 @@ def make_dataloader(
         max_seq_len_teacher=max_seq_len_teacher,
         max_seq_len_student=max_seq_len_student,
         seed=seed,
+        teacher_include_answer=teacher_include_answer,
     )
     return torch.utils.data.DataLoader(
         ds,

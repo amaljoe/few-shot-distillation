@@ -1,0 +1,21 @@
+# Variation 1: Online top-K logit distillation (Qwen3-1.7B)
+#
+# At every answer token position, take the top-256 vocabulary logits from the
+# teacher's output distribution and compute MSE against the student's logits
+# at the same vocabulary positions.  Teacher runs online (frozen, same base
+# weights) with 8-shot context.  No precomputed cache needed.
+#
+# Run:
+#   CUDA_VISIBLE_DEVICES=0,1 accelerate launch \
+#     --num_processes 2 --mixed_precision bf16 --main_process_port 29500 \
+#     src/training/train_online_v1.py --config configs/online_v1.yaml \
+#     --output_dir experiments/online_v1
+
+distillation:
+  n_top_logits: 256        # top-K vocab entries from teacher at each answer token
+  lambda_distill: 0.5
+  normalize_logits: false  # raw logit MSE (not probs); no normalization needed
+
+training:
+  output_dir: "experiments/online_v1"
+  save_steps: 200
