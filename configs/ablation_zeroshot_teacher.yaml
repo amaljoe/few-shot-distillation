@@ -1,0 +1,20 @@
+# Ablation: 0-shot teacher distillation
+#
+# Teacher sees ONLY the target question + gold answer (no few-shot examples).
+# Isolates whether the gain from distillation is specifically due to few-shot
+# context transfer, or simply from any soft-label regularization signal.
+#
+# If few-shot teacher >> 0-shot teacher, few-shot context is causally responsible.
+# If 0-shot teacher ≈ few-shot teacher, gain is from generic soft-label smoothing.
+
+distillation:
+  n_top_logits: 256
+  lambda_distill: 0.5
+  normalize_logits: false
+
+data:
+  num_fewshot_examples: 0       # Teacher has no few-shot context
+
+training:
+  output_dir: "experiments/ablations"
+  save_steps: 200

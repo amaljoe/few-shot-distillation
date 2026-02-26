@@ -1,0 +1,22 @@
+# Ablation: shuffled-answer exemplars
+#
+# Teacher sees 8 exemplars but each exemplar's answer is randomly swapped with
+# another exemplar's answer (questions are correct, answers are mismatched).
+# Tests whether exemplar *content* (specifically correct Q→A correspondences)
+# is what drives the gain, vs. merely having extra tokens in context.
+#
+# If few-shot teacher >> shuffled teacher, correct exemplar content matters.
+# If shuffled ≈ few-shot teacher, longer context / token diversity explains gains.
+
+distillation:
+  n_top_logits: 256
+  lambda_distill: 0.5
+  normalize_logits: false
+
+data:
+  num_fewshot_examples: 8
+  shuffle_fewshot_answers: true   # Randomize which answer pairs with which question
+
+training:
+  output_dir: "experiments/ablations"
+  save_steps: 200

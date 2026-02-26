@@ -132,6 +132,7 @@ class GSM8KDistillDataset(Dataset):
         max_seq_len_student: int = 512,
         seed: int = 42,
         teacher_include_answer: bool = False,
+        shuffle_fewshot_answers: bool = False,
     ):
         self.dataset = dataset
         self.tokenizer = tokenizer
@@ -139,6 +140,7 @@ class GSM8KDistillDataset(Dataset):
         self.max_seq_len_teacher = max_seq_len_teacher
         self.max_seq_len_student = max_seq_len_student
         self.seed = seed
+        self.shuffle_fewshot_answers = shuffle_fewshot_answers
         self.teacher_include_answer = teacher_include_answer
 
         # Pre-compute generation prompt length for alignment
@@ -169,6 +171,17 @@ class GSM8KDistillDataset(Dataset):
         candidates = [i for i in range(len(self.dataset)) if i != idx]
         fewshot_indices = rng.sample(candidates, min(self.num_fewshot, len(candidates)))
         fewshot_examples = [self.dataset[i] for i in fewshot_indices]
+
+        # Shuffle fewshot answers (ablation control): keep questions, randomize answers.
+        # Uses a separate seed offset to avoid correlation with the sampling RNG.
+        if self.shuffle_fewshot_answers and len(fewshot_examples) > 1:
+            answers = [e["answer"] for e in fewshot_examples]
+            shuffle_rng = random.Random(self.seed + idx + 99999)
+            shuffle_rng.shuffle(answers)
+            fewshot_examples = [
+                {"question": e["question"], "answer": a}
+                for e, a in zip(fewshot_examples, answers)
+            ]
 
         # --- Teacher input ---
         teacher_messages = build_fewshot_messages(fewshot_examples, example)
@@ -322,6 +335,7 @@ def make_dataloader(
     num_workers: int = 4,
     seed: int = 42,
     teacher_include_answer: bool = False,
+    shuffle_fewshot_answers: bool = False,
 ) -> torch.utils.data.DataLoader:
     ds = GSM8KDistillDataset(
         dataset=dataset,
@@ -331,6 +345,7 @@ def make_dataloader(
         max_seq_len_student=max_seq_len_student,
         seed=seed,
         teacher_include_answer=teacher_include_answer,
+        shuffle_fewshot_answers=shuffle_fewshot_answers,
     )
     return torch.utils.data.DataLoader(
         ds,
