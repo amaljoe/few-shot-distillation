@@ -47,10 +47,3 @@ lora:
     - down_proj
   bias: "none"
 
-teacher_activations:
-  cache_dir: "experiments/poc/teacher_cache"
-  dtype: "float16"
-  # Storage estimate:
-  #   2B (28 layers × 1536 hidden): ~86KB/example → ~640MB for 7473 train examples
-  #   4B (36 layers × 2560 hidden): ~185KB/example → ~1.4GB
-  #   8B (36 layers × 4096 hidden): ~295KB/example → ~2.2GB

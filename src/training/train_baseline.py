@@ -1,14 +1,19 @@
 """
-Condition B: Standard zero-shot LoRA fine-tuning on GSM8K.
+LoRA SFT baseline: standard zero-shot fine-tuning on GSM8K.
 
-No distillation — pure cross-entropy loss on student inputs.
-Used as the baseline to compare against distillation (Condition C).
+Pure cross-entropy loss on student inputs. No distillation.
 
-Run command (tmux: claude on cn14-dgx):
-  accelerate launch --num_processes 4 --mixed_precision bf16 \
-      src/training/train_baseline.py \
-      --config configs/base.yaml \
-      --output_dir experiments/poc/baseline
+Run command (example — 2 GPUs, Qwen3-1.7B):
+  CUDA_VISIBLE_DEVICES=0,1 accelerate launch \\
+      --num_processes 2 --mixed_precision bf16 --main_process_port 29500 \\
+      src/training/train_baseline.py --config configs/base.yaml \\
+      --output_dir experiments/qwen
+
+Run command (example — 2 GPUs, Llama-3.2-3B-Instruct):
+  CUDA_VISIBLE_DEVICES=0,1 accelerate launch \\
+      --num_processes 2 --mixed_precision bf16 --main_process_port 29500 \\
+      src/training/train_baseline.py --config configs/llama3b.yaml \\
+      --output_dir experiments/llama3b
 """
 
 import argparse

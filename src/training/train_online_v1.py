@@ -1,22 +1,30 @@
 """
-Variation 1 (V1): Online top-K logit distillation on GSM8K.
+Few-Shot Logit Distillation: online top-K logit matching on GSM8K.
 
 At every answer token position, take the top-256 vocabulary logits from the
 teacher's output distribution and compute MSE against the student's logits at
 the same vocabulary positions.
 
-Teacher and student share the same base model weights.  Teacher runs online
+Teacher and student share the same base model weights. Teacher runs online
 (frozen, no grad) with 8-shot context; student is fine-tuned with LoRA.
 
   L_total = L_CE  +  λ * MSE(s_logits[top_idx], t_logits[top_idx])
 
 where top_idx is chosen from the teacher at each answer token position.
 
-Run command (tmux: claude on cn14-dgx):
+Run command (Qwen3-1.7B, GPUs 0,1):
   CUDA_VISIBLE_DEVICES=0,1 accelerate launch \\
       --num_processes 2 --mixed_precision bf16 --main_process_port 29500 \\
-      src/training/train_online_v1.py --config configs/online_v1.yaml \\
-      --output_dir experiments/online_v1
+      src/training/train_online_v1.py \\
+      --base_config configs/base.yaml --config configs/online_v1.yaml \\
+      --output_dir experiments/qwen
+
+Run command (Llama-3.2-3B-Instruct, GPUs 2,3):
+  CUDA_VISIBLE_DEVICES=2,3 accelerate launch \\
+      --num_processes 2 --mixed_precision bf16 --main_process_port 29502 \\
+      src/training/train_online_v1.py \\
+      --base_config configs/llama3b.yaml --config configs/online_v1_llama.yaml \\
+      --output_dir experiments/llama3b
 """
 
 import argparse
@@ -42,6 +50,7 @@ from src.models.student import StudentModel
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", type=str, default="configs/online_v1.yaml")
+    parser.add_argument("--base_config", type=str, default="configs/base.yaml")
     parser.add_argument("--output_dir", type=str, default=None)
     return parser.parse_args()
 
@@ -79,7 +88,7 @@ def answer_alignment(t_lens, labels, device):
 def main():
     args = parse_args()
 
-    base_cfg = OmegaConf.load("configs/base.yaml")
+    base_cfg = OmegaConf.load(args.base_config)
     v1_cfg = OmegaConf.load(args.config)
     cfg = OmegaConf.merge(base_cfg, v1_cfg)
 

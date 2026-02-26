@@ -1,0 +1,11 @@
+# Online logit distillation overrides for Llama-3.2-3B-Instruct
+# Inherits from llama3b.yaml
+
+distillation:
+  n_top_logits: 256
+  lambda_distill: 0.5
+  normalize_logits: false
+
+training:
+  output_dir: "experiments/llama3b"
+  save_steps: 200
