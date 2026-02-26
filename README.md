@@ -108,11 +108,17 @@ training — not an artifact of early-step noise or a single lucky checkpoint.
 
 ![Loss comparison](assets/loss_comparison.png)
 
-Distillation reaches lower CE loss **faster** and **converges to a lower final value**.
-At step 200 the distillation CE loss is already where the SFT baseline reaches at step
-400+. The soft-label signal from the few-shot teacher acts as a better-shaped gradient
-landscape — the model doesn't have to discover the right token distribution purely from
-hard supervision; it receives a warm, context-informed target at every step.
+The distillation model has **higher** CE loss throughout training (~0.60 at step 1000
+vs ~0.27 for SFT). This is expected: the distillation term pulls the student's logits
+toward the teacher's few-shot distribution, which differs from the hard ground-truth
+labels the CE loss is measured against. The model is trading off label memorisation for
+a richer, teacher-informed signal.
+
+The result is classic soft-label distillation behaviour: **worse fit to training labels,
+much better generalisation**. SFT overfits to one-hot targets and plateaus at 64%;
+the distillation model, despite (because of) its higher CE loss, reaches 72.71% on the
+test set. The teacher's soft distribution acts as a regulariser that prevents over-fitting
+to the specific gold tokens and instead captures the broader structure of the problem.
 
 ---
 

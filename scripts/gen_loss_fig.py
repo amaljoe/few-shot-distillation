@@ -65,10 +65,32 @@ if v1_loss:
             label="LoRA SFT + Few-Shot Distillation (CE loss)")
 
 ax.set_xlabel("Training step", fontsize=12)
-ax.set_ylabel("CE loss", fontsize=12)
+ax.set_ylabel("CE loss (lower = better label fit)", fontsize=12)
 ax.set_title("Training CE Loss — SFT vs. Few-Shot Distillation\n(Qwen3-1.7B, GSM8K)",
              fontsize=13, fontweight="bold")
+
+# Annotate final values
+if baseline_loss:
+    bfinal = baseline_loss[-1][1]
+    ax.annotate(f"SFT: {bfinal:.2f}", xy=(baseline_loss[-1][0], bfinal),
+                xytext=(-80, -18), textcoords="offset points",
+                color="#2196F3", fontsize=10, fontweight="bold",
+                arrowprops=dict(arrowstyle="->", color="#2196F3", lw=1.2))
+if v1_loss:
+    vfinal = v1_loss[-1][1]
+    ax.annotate(f"Distill: {vfinal:.2f}", xy=(v1_loss[-1][0], vfinal),
+                xytext=(-100, 15), textcoords="offset points",
+                color="#E91E63", fontsize=10, fontweight="bold",
+                arrowprops=dict(arrowstyle="->", color="#E91E63", lw=1.2))
+
 ax.legend(frameon=False, fontsize=10)
+
+# Add accuracy callout as text box
+ax.text(0.97, 0.97,
+        "Test accuracy\nSFT: 64.3%\nDistill: 72.7%",
+        transform=ax.transAxes, ha="right", va="top",
+        fontsize=10, color="#555",
+        bbox=dict(boxstyle="round,pad=0.4", facecolor="#f5f5f5", edgecolor="#ccc"))
 
 fig.tight_layout()
 out = Path("assets/loss_comparison.png")
