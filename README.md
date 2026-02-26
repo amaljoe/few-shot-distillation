@@ -204,7 +204,7 @@ leads at **all 5** full-training checkpoints (+1.27pp average).
 
 ### Training Loss
 
-![Training loss curve](experiments/figures/loss_curve.png)
+![Training loss curve](assets/loss_curve.png)
 
 CE loss for Condition B (baseline) and C (distillation) over 1000 steps.
 Distillation runs at slightly higher CE loss in early training (the MSE term trades off
@@ -212,7 +212,7 @@ against pure task loss), but both converge to similar final CE values.
 
 ### Eval Accuracy vs Training Step — Qwen3-1.7B
 
-![Accuracy curve](experiments/figures/accuracy_curve.png)
+![Accuracy curve](assets/accuracy_curve.png)
 
 GSM8K accuracy (full test set, 1319 examples) at checkpoints 10–100 (early run) and
 200–1000 (main run). Reference lines show the 8-shot teacher (47.08%) and base 0-shot
@@ -225,7 +225,7 @@ Three phases:
 
 ### Eval Accuracy vs Training Step — Qwen3-8B
 
-![8B Accuracy curve](experiments/figures/8b/accuracy_curve.png)
+![8B Accuracy curve](assets/8b/accuracy_curve.png)
 
 GSM8K accuracy (full test set, 1319 examples) at checkpoints 10–100 (early run) and
 100–1000 (full run). Distillation surges ahead at steps 80–100 (+2.5pp), then degrades
@@ -234,7 +234,7 @@ steadily through extended training. Baseline (blue) finishes at 80.14%; distilla
 
 ### Qwen3-8B Training Loss
 
-![8B Loss curve](experiments/figures/8b/loss_curve.png)
+![8B Loss curve](assets/8b/loss_curve.png)
 
 ---
 
@@ -258,7 +258,7 @@ experiments/ablations_8b/          # 8B scale-up
     ├── results_early.json          # B vs C at steps 10/20/.../100 (1319 examples)
     └── results_full.json           # B vs C at steps 100/200/.../1000 (1319 examples)
 
-experiments/figures/
+assets/
 ├── loss_curve.png                  # 1.7B training CE loss — B vs C
 ├── accuracy_curve.png              # 1.7B eval accuracy steps 10–1000 — B vs C
 └── 8b/
