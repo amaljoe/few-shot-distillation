@@ -1,9 +1,14 @@
 """
 Checkpoint accuracy curve evaluation.
 
-Evaluates Conditions B and C at every saved checkpoint (200/400/.../1000)
-on a fixed subset of the GSM8K test set. Uses vLLM offline (LLM class) with
-LoRA so we never restart the server — just swap the LoRARequest per checkpoint.
+Evaluates conditions at every saved checkpoint (200/400/.../1000) on a fixed
+subset of the GSM8K test set.
+
+Auto-detects checkpoint type per condition:
+  - LoRA checkpoints (adapter_config.json present): loads base model once, swaps
+    LoRARequest per checkpoint (fast, single vLLM init).
+  - Full-FT checkpoints (no adapter_config.json): loads each checkpoint as a full
+    model, evaluates, then releases (one vLLM init per checkpoint).
 
 Run command (tmux: claude, INSIDE apptainer, after training is done):
   CUDA_VISIBLE_DEVICES=0,1 python scripts/eval_checkpoints.py \\
@@ -13,6 +18,7 @@ Run command (tmux: claude, INSIDE apptainer, after training is done):
 """
 
 import argparse
+import gc
 import json
 import re
 import sys
@@ -67,15 +73,19 @@ def build_prompts(examples: list[dict], tokenizer) -> list[str]:
     prompts = []
     for ex in examples:
         messages = [{"role": "user", "content": f"Question: {ex['question']}"}]
-        try:
-            text = tokenizer.apply_chat_template(
-                messages, tokenize=False, add_generation_prompt=True,
-                enable_thinking=False,
-            )
-        except TypeError:
-            text = tokenizer.apply_chat_template(
-                messages, tokenize=False, add_generation_prompt=True,
-            )
+        if getattr(tokenizer, "chat_template", None) is None:
+            # Plain text for base models without chat template
+            text = f"Question: {ex['question']}\n"
+        else:
+            try:
+                text = tokenizer.apply_chat_template(
+                    messages, tokenize=False, add_generation_prompt=True,
+                    enable_thinking=False,
+                )
+            except TypeError:
+                text = tokenizer.apply_chat_template(
+                    messages, tokenize=False, add_generation_prompt=True,
+                )
         prompts.append(text)
     return prompts
 
@@ -83,7 +93,7 @@ def build_prompts(examples: list[dict], tokenizer) -> list[str]:
 def evaluate_checkpoint(
     llm: LLM,
     sampling_params: SamplingParams,
-    lora_request: LoRARequest,
+    lora_request: LoRARequest | None,
     prompts: list[str],
     ground_truths: list[str],
     desc: str,
@@ -98,6 +108,20 @@ def evaluate_checkpoint(
     accuracy = correct / len(prompts)
     print(f"  {desc}: {accuracy:.2%} ({correct}/{len(prompts)})")
     return {"accuracy": accuracy, "correct": correct, "total": len(prompts)}
+
+
+def is_lora_checkpoint(ckpt_path: Path) -> bool:
+    """Return True if checkpoint contains a LoRA adapter (adapter_config.json present)."""
+    return (ckpt_path / "adapter_config.json").exists()
+
+
+def detect_condition_type(cond: str, base_dir: str, checkpoint_steps: list[int]) -> str:
+    """Return 'lora', 'full_ft', or 'unknown' based on first found checkpoint."""
+    for step in checkpoint_steps:
+        ckpt_path = Path(base_dir) / cond / cond / f"checkpoint-{step}"
+        if ckpt_path.exists():
+            return "lora" if is_lora_checkpoint(ckpt_path) else "full_ft"
+    return "unknown"
 
 
 def main():
@@ -126,17 +150,17 @@ def main():
     print(f"  Conditions: {args.conditions}")
     print(f"  Steps: {args.checkpoint_steps}")
 
-    # Load base model once — swap LoRA adapters per checkpoint
-    print(f"\nLoading base model: {cfg.model.name}")
-    llm = LLM(
-        model=cfg.model.name,
-        enable_lora=True,
-        max_lora_rank=cfg.lora.r,
-        max_model_len=args.max_model_len,
-        tensor_parallel_size=args.tensor_parallel_size,
-        dtype="bfloat16",
-        trust_remote_code=True,
-    )
+    # Classify conditions
+    lora_conditions = []
+    fullft_conditions = []
+    for cond in args.conditions:
+        ctype = detect_condition_type(cond, args.base_dir, args.checkpoint_steps)
+        print(f"  {cond}: detected as {ctype}")
+        if ctype == "lora":
+            lora_conditions.append(cond)
+        else:
+            fullft_conditions.append(cond)
+
     sampling_params = SamplingParams(
         temperature=0,
         max_tokens=args.max_new_tokens,
@@ -149,9 +173,52 @@ def main():
         "conditions": {},
     }
 
-    lora_id_counter = 1
-    for cond in args.conditions:
-        print(f"\n=== Condition: {cond} ===")
+    # --- LoRA conditions: load base model once, swap adapters ---
+    if lora_conditions:
+        lora_cfg = getattr(cfg, "lora", None)
+        max_lora_rank = lora_cfg.r if lora_cfg is not None else 64
+        print(f"\nLoading base model for LoRA eval: {cfg.model.name}")
+        llm = LLM(
+            model=cfg.model.name,
+            enable_lora=True,
+            max_lora_rank=max_lora_rank,
+            max_model_len=args.max_model_len,
+            tensor_parallel_size=args.tensor_parallel_size,
+            dtype="bfloat16",
+            trust_remote_code=True,
+        )
+
+        lora_id_counter = 1
+        for cond in lora_conditions:
+            print(f"\n=== Condition: {cond} (LoRA) ===")
+            results["conditions"][cond] = {}
+
+            for step in tqdm(args.checkpoint_steps, desc=cond):
+                ckpt_path = Path(args.base_dir) / cond / cond / f"checkpoint-{step}"
+                if not ckpt_path.exists():
+                    print(f"  Skipping {ckpt_path} (not found)")
+                    continue
+
+                lora_req = LoRARequest(
+                    lora_name=f"{cond}_{step}",
+                    lora_int_id=lora_id_counter,
+                    lora_path=str(ckpt_path),
+                )
+                lora_id_counter += 1
+
+                result = evaluate_checkpoint(
+                    llm, sampling_params, lora_req, prompts, ground_truths,
+                    desc=f"step {step}",
+                )
+                results["conditions"][cond][f"step_{step}"] = result
+
+        del llm
+        gc.collect()
+        torch.cuda.empty_cache()
+
+    # --- Full-FT conditions: load each checkpoint as full model ---
+    for cond in fullft_conditions:
+        print(f"\n=== Condition: {cond} (full-FT) ===")
         results["conditions"][cond] = {}
 
         for step in tqdm(args.checkpoint_steps, desc=cond):
@@ -160,18 +227,24 @@ def main():
                 print(f"  Skipping {ckpt_path} (not found)")
                 continue
 
-            lora_req = LoRARequest(
-                lora_name=f"{cond}_{step}",
-                lora_int_id=lora_id_counter,
-                lora_path=str(ckpt_path),
+            print(f"  Loading checkpoint: {ckpt_path}")
+            llm = LLM(
+                model=str(ckpt_path),
+                max_model_len=args.max_model_len,
+                tensor_parallel_size=args.tensor_parallel_size,
+                dtype="bfloat16",
+                trust_remote_code=True,
             )
-            lora_id_counter += 1
 
             result = evaluate_checkpoint(
-                llm, sampling_params, lora_req, prompts, ground_truths,
+                llm, sampling_params, None, prompts, ground_truths,
                 desc=f"step {step}",
             )
             results["conditions"][cond][f"step_{step}"] = result
+
+            del llm
+            gc.collect()
+            torch.cuda.empty_cache()
 
     # Summary
     print("\n" + "=" * 60)
@@ -179,7 +252,7 @@ def main():
     print("=" * 60)
     header = f"{'Step':>6}"
     for cond in args.conditions:
-        header += f"  {cond:>12}"
+        header += f"  {cond:>14}"
     print(header)
     for step in args.checkpoint_steps:
         row = f"{step:>6}"

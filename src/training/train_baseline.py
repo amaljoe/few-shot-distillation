@@ -80,9 +80,12 @@ def main():
     )
 
     # Student model (no activation capture needed for baseline)
+    use_lora = getattr(cfg.training, "use_lora", True)
+    lora_cfg = OmegaConf.to_container(cfg.lora) if (use_lora and hasattr(cfg, "lora")) else None
     student_wrapper = StudentModel(
         model_name=cfg.model.name,
-        lora_config=OmegaConf.to_container(cfg.lora),
+        lora_config=lora_cfg,
+        use_lora=use_lora,
         num_layers=cfg.model.num_layers,
         device_map=None,  # accelerate handles device placement
     )

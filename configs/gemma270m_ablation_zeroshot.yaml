@@ -1,0 +1,17 @@
+# Gemma-3-270M: 0-shot teacher distillation (causal control)
+#
+# Teacher sees only question + answer (no few-shot context).
+# Isolates whether gain comes from few-shot context transfer or
+# generic soft-label regularization. Direct control for Gemma experiments.
+
+distillation:
+  n_top_logits: 256
+  lambda_distill: 0.5
+  normalize_logits: false
+
+data:
+  num_fewshot_examples: 0     # Teacher has no few-shot context
+
+training:
+  output_dir: "experiments/gemma270m/ablations"
+  save_steps: 200

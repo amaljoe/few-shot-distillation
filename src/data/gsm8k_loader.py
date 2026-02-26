@@ -61,8 +61,44 @@ def build_student_messages(query: dict) -> list[dict]:
     return [{"role": "user", "content": f"Question: {query['question']}"}]
 
 
+def _has_chat_template(tokenizer: PreTrainedTokenizer) -> bool:
+    """Return True if the tokenizer has a usable chat template."""
+    return getattr(tokenizer, "chat_template", None) is not None
+
+
+def _format_as_plain_text(messages: list[dict], add_generation_prompt: bool = True) -> str:
+    """
+    Plain-text fallback for base models without a chat template.
+
+    Format:
+      <user_content>
+      <assistant_content>
+
+      <user_content>
+      <assistant_content>
+
+      ...
+      <user_content>          ← last user message (target question)
+      [\\n if add_generation_prompt]
+    """
+    parts = []
+    for i, msg in enumerate(messages):
+        parts.append(msg["content"])
+        # Blank line separator after each Q-A pair (i.e., after assistant, before next user)
+        if (msg["role"] == "assistant"
+                and i + 1 < len(messages)
+                and messages[i + 1]["role"] == "user"):
+            parts.append("")
+    text = "\n".join(parts)
+    if add_generation_prompt:
+        text += "\n"
+    return text
+
+
 def apply_chat_template_no_think(tokenizer: PreTrainedTokenizer, messages: list[dict]) -> str:
-    """Apply Qwen3 chat template with thinking mode disabled."""
+    """Apply chat template with thinking disabled; fall back to plain text for base models."""
+    if not _has_chat_template(tokenizer):
+        return _format_as_plain_text(messages, add_generation_prompt=True)
     try:
         return tokenizer.apply_chat_template(
             messages,
@@ -193,19 +229,24 @@ class GSM8KDistillDataset(Dataset):
             teacher_messages_with_ans = teacher_messages + [
                 {"role": "assistant", "content": example["answer"]}
             ]
-            try:
-                teacher_prompt = self.tokenizer.apply_chat_template(
-                    teacher_messages_with_ans,
-                    tokenize=False,
-                    add_generation_prompt=False,
-                    chat_template_kwargs={"enable_thinking": False},
+            if not _has_chat_template(self.tokenizer):
+                teacher_prompt = _format_as_plain_text(
+                    teacher_messages_with_ans, add_generation_prompt=False
                 )
-            except TypeError:
-                teacher_prompt = self.tokenizer.apply_chat_template(
-                    teacher_messages_with_ans,
-                    tokenize=False,
-                    add_generation_prompt=False,
-                )
+            else:
+                try:
+                    teacher_prompt = self.tokenizer.apply_chat_template(
+                        teacher_messages_with_ans,
+                        tokenize=False,
+                        add_generation_prompt=False,
+                        chat_template_kwargs={"enable_thinking": False},
+                    )
+                except TypeError:
+                    teacher_prompt = self.tokenizer.apply_chat_template(
+                        teacher_messages_with_ans,
+                        tokenize=False,
+                        add_generation_prompt=False,
+                    )
             teacher_query_pos = 0  # not used by online training scripts
         else:
             teacher_prompt = apply_chat_template_no_think(self.tokenizer, teacher_messages)
@@ -252,19 +293,24 @@ class GSM8KDistillDataset(Dataset):
             {"role": "user", "content": f"Question: {example['question']}"},
             {"role": "assistant", "content": example["answer"]},
         ]
-        try:
-            full_seq = self.tokenizer.apply_chat_template(
-                student_with_answer_msgs,
-                tokenize=False,
-                add_generation_prompt=False,
-                chat_template_kwargs={"enable_thinking": False},
+        if not _has_chat_template(self.tokenizer):
+            full_seq = _format_as_plain_text(
+                student_with_answer_msgs, add_generation_prompt=False
             )
-        except TypeError:
-            full_seq = self.tokenizer.apply_chat_template(
-                student_with_answer_msgs,
-                tokenize=False,
-                add_generation_prompt=False,
-            )
+        else:
+            try:
+                full_seq = self.tokenizer.apply_chat_template(
+                    student_with_answer_msgs,
+                    tokenize=False,
+                    add_generation_prompt=False,
+                    chat_template_kwargs={"enable_thinking": False},
+                )
+            except TypeError:
+                full_seq = self.tokenizer.apply_chat_template(
+                    student_with_answer_msgs,
+                    tokenize=False,
+                    add_generation_prompt=False,
+                )
         full_enc = self.tokenizer(
             full_seq,
             truncation=True,

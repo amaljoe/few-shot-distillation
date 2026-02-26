@@ -161,21 +161,31 @@ def main():
 
             messages = build_fewshot_messages(fewshot_examples, example, nshot)
 
-            # Apply Qwen3 chat template with thinking disabled
-            try:
-                prompt = tokenizer.apply_chat_template(
-                    messages,
-                    tokenize=False,
-                    add_generation_prompt=True,
-                    chat_template_kwargs={"enable_thinking": False},
-                )
-            except TypeError:
-                # Fallback if chat_template_kwargs not supported
-                prompt = tokenizer.apply_chat_template(
-                    messages,
-                    tokenize=False,
-                    add_generation_prompt=True,
-                )
+            # Apply chat template; fall back to plain text for base models
+            if getattr(tokenizer, "chat_template", None) is None:
+                parts = []
+                for i, msg in enumerate(messages):
+                    parts.append(msg["content"])
+                    if (msg["role"] == "assistant"
+                            and i + 1 < len(messages)
+                            and messages[i + 1]["role"] == "user"):
+                        parts.append("")
+                prompt = "\n".join(parts) + "\n"
+            else:
+                try:
+                    prompt = tokenizer.apply_chat_template(
+                        messages,
+                        tokenize=False,
+                        add_generation_prompt=True,
+                        chat_template_kwargs={"enable_thinking": False},
+                    )
+                except TypeError:
+                    # Fallback if chat_template_kwargs not supported
+                    prompt = tokenizer.apply_chat_template(
+                        messages,
+                        tokenize=False,
+                        add_generation_prompt=True,
+                    )
 
             prompts.append(prompt)
             ground_truths.append(get_ground_truth(example))

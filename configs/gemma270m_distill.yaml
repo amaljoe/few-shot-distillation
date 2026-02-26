@@ -1,0 +1,13 @@
+# Gemma-3-270M: Few-shot logit distillation (8-shot teacher)
+#
+# Full fine-tuning + online few-shot distillation.
+# Same λ and K as Qwen3 experiments for direct comparability.
+
+distillation:
+  n_top_logits: 256
+  lambda_distill: 0.5
+  normalize_logits: false
+
+training:
+  output_dir: "experiments/gemma270m"
+  save_steps: 200
