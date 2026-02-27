@@ -1,0 +1,7 @@
+# Distillation override config for XTREME experiments
+# Merged on top of model-specific xtreme_*.yaml via OmegaConf.merge()
+
+distillation:
+  n_top_logits: 256
+  lambda_distill: 0.5
+  normalize_logits: false
