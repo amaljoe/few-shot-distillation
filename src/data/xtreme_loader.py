@@ -470,6 +470,7 @@ class XTREMEDistillDataset(Dataset):
         seed: int = 42,
         teacher_include_answer: bool = False,
         zeroshot_teacher: bool = False,
+        split: str = "train",               # "train" or "dev" (for meta outer objective)
     ):
         self.tokenizer = tokenizer
         self.tasks = tasks or TASKS
@@ -479,6 +480,7 @@ class XTREMEDistillDataset(Dataset):
         self.seed = seed
         self.teacher_include_answer = teacher_include_answer
         self.zeroshot_teacher = zeroshot_teacher
+        self.split = split
 
         self.gen_prompt_len = _get_gen_prompt_len(tokenizer)
 
@@ -487,7 +489,7 @@ class XTREMEDistillDataset(Dataset):
 
         for task in self.tasks:
             for lang in self.train_langs:
-                data = load_task_data(task, "train", lang, max_samples_per_task_lang)
+                data = load_task_data(task, self.split, lang, max_samples_per_task_lang)
                 if data:
                     self.task_data[(task, lang)] = data
 
@@ -628,6 +630,7 @@ def make_xtreme_dataloader(
     seed: int = 42,
     teacher_include_answer: bool = False,
     zeroshot_teacher: bool = False,
+    split: str = "train",
 ) -> torch.utils.data.DataLoader:
     ds = XTREMEDistillDataset(
         tokenizer=tokenizer,
@@ -639,6 +642,7 @@ def make_xtreme_dataloader(
         seed=seed,
         teacher_include_answer=teacher_include_answer,
         zeroshot_teacher=zeroshot_teacher,
+        split=split,
     )
     pad_id = tokenizer.pad_token_id or tokenizer.eos_token_id
     return torch.utils.data.DataLoader(

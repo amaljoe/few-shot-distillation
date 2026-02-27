@@ -1,0 +1,5 @@
+# Distillation override — λ=0.05 for all tasks
+distillation:
+  n_top_logits: 256
+  lambda_distill: 0.05
+  normalize_logits: false

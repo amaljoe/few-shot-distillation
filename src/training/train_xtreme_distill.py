@@ -59,6 +59,8 @@ def parse_args():
                         help="Override training.max_steps from config")
     parser.add_argument("--per_device_batch_size", type=int, default=None,
                         help="Override training.per_device_train_batch_size from config")
+    parser.add_argument("--distill_warmup_steps", type=int, default=None,
+                        help="Only distill for this many steps, then switch to CE-only SFT")
     return parser.parse_args()
 
 
@@ -251,7 +253,8 @@ def main():
             n_valid_elements = mask.sum() * K_vocab
             dist_loss = ((t_top - s_top).pow(2) * mask).sum() / (n_valid_elements + 1e-8)
 
-            total_loss = ce_loss + lam * dist_loss
+            lam_eff = lam if (args.distill_warmup_steps is None or step < args.distill_warmup_steps) else 0.0
+            total_loss = ce_loss + lam_eff * dist_loss
             accelerator.backward(total_loss)
 
             if accelerator.sync_gradients:
@@ -275,7 +278,8 @@ def main():
                         writer.add_scalar("train/dist_loss",  avg_dist, step)
                         writer.add_scalar("train/total_loss", avg_ce + lam * avg_dist, step)
                         writer.add_scalar("train/lr",         scheduler.get_last_lr()[0], step)
-                        progress.set_postfix(ce=f"{avg_ce:.4f}", dist=f"{avg_dist:.4f}", step=step)
+                        mode = "distill" if (args.distill_warmup_steps is None or step <= args.distill_warmup_steps) else "sft"
+                        progress.set_postfix(ce=f"{avg_ce:.4f}", dist=f"{avg_dist:.4f}", mode=mode, step=step)
                     ce_loss_accum   = 0.0
                     dist_loss_accum = 0.0
 

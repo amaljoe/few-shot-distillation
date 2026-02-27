@@ -1,0 +1,16 @@
+# Distillation override for XTREME meta-learning (bilevel λ per task)
+# Merge on top of xtreme_{model}.yaml
+
+distillation:
+  n_top_logits: 256
+  lambda_max: 1.0          # sigmoid(logit) * lambda_max → λ ∈ (0, lambda_max)
+  # lambda_init is implicitly 0.5 * lambda_max (sigmoid(0) = 0.5)
+
+  # Outer (meta) optimiser
+  meta_lr: 0.05            # Adam lr for logit_lambda; larger than typical because
+                            # dot products are small (inner grad · val grad)
+  meta_update_every: 10    # meta update every N inner steps
+
+  # Val (outer objective) dataset
+  meta_val_samples: 500    # max samples per (task, lang) from dev split
+  meta_val_batch_size: 16  # val batch size per meta update (small for speed)

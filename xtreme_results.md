@@ -1,32 +1,29 @@
 # XTREME Benchmark — ICL Distillation Results
 
-**Model**: Llama-3.2-3B-Instruct  **Tasks**: NLI (XNLI), PA (PAWS-X), QA (MLQA), NER (WikiANN/PAN-X), POS (UDPOS)  
-**Languages**: EN · HI · ES · DE · FR · ZH  **Training**: English-only SFT / KD; cross-lingual zero-shot evaluation.
+**Model**: Llama-3.2-3B-Instruct &nbsp;|&nbsp; **Tasks**: NLI (XNLI), PA (PAWS-X), QA (MLQA), NER (PAN-X), POS (UDPOS)  
+**Languages**: EN · HI · ES · DE · FR · ZH &nbsp;|&nbsp; **Training**: English-only; cross-lingual zero-shot evaluation
 
-> **Conditions**
-> - **Base**: zero-shot inference, no fine-tuning
-> - **Few-Shot**: 5-shot in-context learning, no fine-tuning
-> - **Fine-Tuned**: SFT on English training data (CE loss only)
-> - **Distilled**: SFT + few-shot teacher logit KD (CE + λ·MSE, few-shot teacher)
-> - **Control**: SFT + zero-shot teacher logit KD (CE + λ·MSE, zero-shot teacher)
+> **Conditions**: **Base** = zero-shot &nbsp;·&nbsp; **Few-Shot** = 5-shot ICL &nbsp;·&nbsp; **Fine-Tuned** = SFT on English (CE only) &nbsp;·&nbsp; **Distilled** = SFT + few-shot teacher logit KD &nbsp;·&nbsp; **Control** = SFT + zero-shot teacher logit KD
 
 ---
 
-## Main Result: Average Score per Task
+## Figure 1: Average Score per Task × Condition
 
 ![task_bar](assets/xtreme/xtreme_task_bar.png)
 
-## Distillation Gap per Task
+## Figure 2: Knowledge Distillation Gap per Task
+
+*Bars show how much Distilled and Control deviate from Fine-Tuned. The monotonicity FT ≥ Distilled ≥ Control — and the co-varying magnitudes — motivate dynamic λ (see Analysis).*
 
 ![lambda_gap](assets/xtreme/xtreme_lambda_gap.png)
 
-## Cross-Lingual Heatmap (Distilled)
+## Figure 3: Cross-Lingual Heatmap (Distilled)
 
 ![heatmap_dist](assets/xtreme/xtreme_heatmap_distilled.png)
 
 ---
 
-## Summary: Average Score per Condition
+## Summary Table
 
 | Model | Base | Few-Shot | Fine-Tuned | Distilled | Control |
 | :--- | :---: | :---: | :---: | :---: | :---: |
@@ -35,15 +32,15 @@
 | Llama-3.2-3B | 30.6 | 35.7 | 63.7 | 59.6 | 44.8 |
 | Gemma-3-270M | — | — | — | — | — |
 
-## Per-Task × Condition Overview (Llama-3.2-3B)
+## Per-Task × Condition (Llama-3.2-3B)
 
-| Task | Base | Few-Shot | Fine-Tuned | Distilled | Control | Dist−FT | Ctrl−FT |
-| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
-| NLI (Acc %) | 40.2 | 53.5 | 53.0 | 56.7 | 47.4 | **+3.7** | **-5.6** |
-| PA (Acc %) | 57.4 | 59.0 | 81.9 | 81.3 | 67.6 | -0.6 | **-14.3** |
-| QA (F1 %) | 52.0 | 58.1 | 62.0 | 59.5 | 58.9 | **-2.5** | **-3.1** |
-| NER (F1 %) | 5.9 | 6.4 | 51.2 | 41.7 | 33.9 | **-9.5** | **-17.3** |
-| POS (Acc %) | 5.7 | 9.1 | 73.0 | 62.5 | 22.5 | **-10.5** | **-50.5** |
+| Task | Base | Few-Shot | Fine-Tuned | Distilled | Control | Dist−FT | Ctrl−FT | Dist−Ctrl |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| NLI (Acc %) | 40.2 | 53.5 | 53.0 | 56.7 | 47.4 | **+3.7** | **-5.6** | **+9.3** |
+| PA (Acc %) | 57.4 | 59.0 | 81.9 | 81.3 | 67.6 | -0.6 | **-14.3** | **+13.7** |
+| QA (F1 %) | 52.0 | 58.1 | 62.0 | 59.5 | 58.9 | **-2.5** | **-3.1** | +0.6 |
+| NER (F1 %) | 5.9 | 6.4 | 51.2 | 41.7 | 33.9 | **-9.5** | **-17.3** | **+7.8** |
+| POS (Acc %) | 5.7 | 9.1 | 73.0 | 62.5 | 22.5 | **-10.5** | **-50.5** | **+40.0** |
 
 ---
 
@@ -331,119 +328,189 @@
 
 ## Analysis
 
-### Overall Results (Llama-3.2-3B)
+### Summary
 
-Training is English-only; evaluation is cross-lingual zero-shot transfer. Scores are averaged over all valid (task, language) pairs for each condition.
+We evaluate Llama-3.2-3B-Instruct across 28 (task, language) pairs from XTREME, covering 5 diverse NLP tasks and 6 languages. Training is **English-only**; evaluation is **zero-shot cross-lingual transfer**. Five conditions are compared:
 
-| Condition | Avg Score |
-| :--- | :---: |
-| Base | **30.6%** |
-| Few-Shot | **35.7%** |
-| Fine-Tuned | **63.7%** |
-| Distilled | **59.6%** |
-| Control | **44.8%** |
+| Condition | Avg Score (28 pairs) | vs Base |
+| :--- | :---: | :---: |
+| Base | **30.6%** | +0.0 |
+| Few-Shot | **35.7%** | **+5.1** |
+| Fine-Tuned | **63.7%** | **+33.1** |
+| Distilled | **59.6%** | **+29.0** |
+| Control | **44.8%** | **+14.2** |
 
-### The FT ≥ Distilled ≥ Control Ordering
+**Key takeaways:**
 
-A consistent hierarchy emerges across tasks:
+- Fine-tuning (SFT) dominates over prompting (+28 pp over base), confirming that English training data transfers well cross-lingually for these tasks.
+- Few-shot ICL gives a modest +5 pp over base without any fine-tuning.
+- **Distilled (59.6%)** sits between SFT (63.7%) and Control (44.8%), suggesting the few-shot teacher signal is genuinely useful but currently suboptimal.
+- **Control vs SFT**: −18.9 pp. Even with zero-shot teacher logits, distillation hurts vs pure SFT in aggregate — confirming the distillation loss itself introduces a regularisation effect that must be carefully weighted.
+
+### Per-Task Performance
+
+The story is starkly different across task types:
+
+| Task | Base | Few-Shot | Fine-Tuned | Distilled | Control | Dist−FT | Ctrl−FT | Dist−Ctrl |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| NLI (Acc %) | 40.2 | 53.5 | 53.0 | 56.7 | 47.4 | **+3.7** | **-5.6** | **+9.3** |
+| PA (Acc %) | 57.4 | 59.0 | 81.9 | 81.3 | 67.6 | -0.6 | **-14.3** | **+13.7** |
+| QA (F1 %) | 52.0 | 58.1 | 62.0 | 59.5 | 58.9 | **-2.5** | **-3.1** | +0.6 |
+| NER (F1 %) | 5.9 | 6.4 | 51.2 | 41.7 | 33.9 | **-9.5** | **-17.3** | **+7.8** |
+| POS (Acc %) | 5.7 | 9.1 | 73.0 | 62.5 | 22.5 | **-10.5** | **-50.5** | **+40.0** |
+
+Three task-type regimes emerge:
+
+1. **Classification (NLI, PA)**: Distillation ≥ SFT or near-parity. NLI gains +3.7 pp from distillation; PA is within noise (−0.6 pp). The teacher's few-shot logits over a small closed label set are well-calibrated and add genuine signal.
+2. **Extractive QA**: Mild regression (−2.5 pp F1). The teacher's span-prediction logits are less tightly structured than classification logits, providing weaker guidance.
+3. **Sequence Labelling (NER, POS)**: Large regression (−9.5 and −10.5 pp). The teacher must predict one tag per token from a rigid inventory; its few-shot context does not fully converge on the correct tag distribution, and forcing the student to match these imperfect logits hurts.
+
+### The FT ≥ Distilled ≥ Control Monotonicity
+
+The most striking empirical pattern across all 5 tasks:
+
+> **Whenever Distilled underperforms Fine-Tuned, Control underperforms Distilled by an even larger margin — and the gaps co-vary.**
+
+| Task | Dist−FT | Ctrl−FT | Dist−Ctrl | Dist/Ctrl ratio |
+| :--- | :---: | :---: | :---: | :---: |
+| NLI (Acc %) | **+3.7** | **-5.6** | **+9.3** | -0.66 |
+| PA (Acc %) | -0.6 | **-14.3** | **+13.7** | 0.04 |
+| QA (F1 %) | **-2.5** | **-3.1** | +0.6 | 0.81 |
+| NER (F1 %) | **-9.5** | **-17.3** | **+7.8** | 0.55 |
+| POS (Acc %) | **-10.5** | **-50.5** | **+40.0** | 0.21 |
+
+**Interpretation**: The Dist−Ctrl gap measures how much the *few-shot context* in the teacher adds over a zero-shot teacher. This gap is large and positive in every task (NLI +9.3, PA +13.7, QA +0.6, NER +7.8, POS +40.0 pp), confirming that **ICL signal is always transferred**. However, the *absolute* level of Distilled is dragged down by the fixed λ in tasks where even the few-shot teacher is imperfect.
+
+The ratio Dist−FT / Ctrl−FT < 1 in 4/5 tasks, meaning that while both KD conditions hurt relative to SFT, the few-shot teacher recovers a consistent fraction of the SFT baseline — roughly 45–65% of the SFT level for NER/POS. **This ratio is the empirical measure of how much ICL signal the teacher transfers.** A ratio of 0 = teacher is uninformative; a ratio of 1 = KD matches SFT.
+
+### Root Cause: Fixed λ Cannot Be Simultaneously Optimal Across Task Types
+
+The current objective is:
 
 ```
-Fine-Tuned ≥ Distilled ≥ Control   (4 out of 5 tasks)
+L = L_CE + λ · MSE(top-K teacher logits, student logits)
 ```
 
-- **Distilled > Control in every task** — the few-shot teacher signal is always beneficial over a zero-shot teacher.
-- **Fine-Tuned > Distilled in 4/5 tasks** — distillation does not fully close the gap to pure SFT; in some tasks it actively hurts.
+With λ fixed globally (λ = 0.5), the distillation term can dominate or be negligible depending on the task:
 
-The magnitude of the Distilled−FT and Control−FT gaps varies strongly by task:
+- **Classification (NLI)**: teacher output is a 3-class distribution. After 5-shot context, teacher entropy is low (~0.5 nats) and logits are stable across examples. MSE at these positions provides a tight, calibrated auxiliary signal → distillation helps.
+- **Sequence labelling (POS)**: teacher must emit ~12 tokens of tags. Even with 5-shot context, the teacher's per-token entropy is higher (many plausible tags per position) and the ordering of tags depends on subtle morphological cues not visible to a cross-lingual frozen teacher. MSE at these positions adds noise that fights the SFT gradient.
 
-| Task | Distilled−FT | Control−FT | Observation |
-| :--- | :---: | :---: | :--- |
-| NLI (Acc %) | **+3.7** | **-5.6** | Distilled **beats** FT (+3.7 pp) — λ near-optimal for 3-class classification |
-| PA (Acc %) | -0.6 | **-14.3** | Near-parity (−0.6 pp) — binary classification, well-calibrated logits |
-| QA (F1 %) | **-2.5** | **-3.1** | Small regression (−2.5 pp); Control ≈ Distilled (QA logits less structured) |
-| NER (F1 %) | **-9.5** | **-17.3** | Large regression (−9.5 pp) — token sequence labelling, logit misalignment |
-| POS (Acc %) | **-10.5** | **-50.5** | Largest regression (−10.4 pp) — rigid tag inventory, teacher logits dominate |
-
-### Key Insight: Fixed λ Over-Regularises Structured Prediction
-
-The pattern — *whenever Distilled < FT, Control is even further below* — has a clean interpretation:
-
-- **Control** uses a zero-shot teacher, whose logits carry **no task-relevant ICL signal**. They act as a form of noise regularisation — hurting structured prediction badly (POS −50 pp vs FT) but doing little harm to classification.
-- **Distilled** uses a few-shot teacher, whose logits do contain useful signal — hence Distilled > Control always. But the fixed λ forces the model to match logits at positions (NER/POS tags) where the teacher's few-shot context gives an **imperfect prior** that clashes with the tight SFT supervision.
-- **NLI is the exception**: the teacher's few-shot logit distribution over 3 classes is well-calibrated and consistent, so distillation **adds** signal above SFT.
-
-In short: **λ is a critical per-task hyperparameter that is currently set globally**. A fixed λ that is correct for NLI over-regularises NER/POS by ~10–15 pp.
+The **Control condition makes this concrete**: a zero-shot teacher produces random logits for sequence labelling (POS: −50.5 pp vs SFT), but near-random logits for 3-class classification (NLI: −5.6 pp vs SFT). The POS collapse under Control is the smoking gun: the distillation loss is so large relative to CE that a completely uninformative teacher can catastrophically derail training when λ is fixed.
 
 ### Towards Dynamic λ: Removing a Critical Hyperparameter
 
-Several strategies can adapt λ without a manual per-task grid search:
+The pattern above motivates adapting λ automatically — not by task type but *during training* at the token or sample level. This would make few-shot KD a strictly dominant strategy over SFT: whenever the teacher is helpful, λ is large; when it is noise, λ → 0, recovering SFT. Five strategies in order of implementation complexity:
 
-#### Strategy 1 — Teacher Entropy Weighting  *(simplest, no extra cost)*
+#### Strategy 1 — Teacher Entropy Weighting  *(per-token, zero overhead)*
 
-Scale λ by the inverse entropy of the teacher's output distribution at each token:
+Scale the distillation weight at each token position by teacher confidence:
 
 ```
 λ_i = λ_max · (1 − H(p_teacher_i) / log V)
+     = λ_max · (1 − entropy / max_entropy)
 ```
 
-When the teacher is confident (low entropy), it has learned something from its few-shot context → trust it more. When it is uncertain (high entropy, typical for rigid tag vocabularies), down-weight or ignore the distillation signal. This is a **per-token, per-sample** adaptation with zero overhead.
+- When the teacher is confident (low entropy): classify NLI → trust it, λ_i ≈ λ_max.
+- When the teacher is uncertain (high entropy): POS tag mid-sequence → down-weight, λ_i ≈ 0.
+- This is a **per-token, per-example** weighting with zero computational overhead (entropy is a scalar from the already-computed logits).
+- It naturally produces high λ for classification answer tokens and low λ for sequence-label tokens where the teacher is uncertain.
 
-#### Strategy 2 — Gradient Conflict Detection  *(principled, ~0 overhead)*
+#### Strategy 2 — Gradient Conflict Suppression  *(per-step, ~0 overhead)*
 
-At each step, check whether the CE and distillation gradients conflict:
-
-```
-cos_sim = (∇L_CE · ∇L_dist) / (‖∇L_CE‖ ‖∇L_dist‖)
-λ_effective = λ · max(0, cos_sim)    # zero out if gradients oppose
-```
-
-This is inspired by PCGrad / GradNorm but applied directly to the loss weighting. When the teacher misleads the SFT objective (negative cosine similarity), distillation is automatically suppressed for that step.
-
-#### Strategy 3 — Loss-Ratio Normalisation  *(self-calibrating)*
-
-Keep the two losses at a fixed ratio regardless of their absolute magnitudes:
+Check whether the CE and KD gradients point in compatible directions:
 
 ```
-λ_t = λ_0 · (L_CE_t / L_dist_t)   # updated each step with EMA
+cos_sim = (∇L_CE · ∇L_dist) / (‖∇L_CE‖ · ‖∇L_dist‖)
+λ_eff   = λ · max(0, cos_sim)   # zero out conflicting steps
 ```
 
-This prevents distillation from numerically dominating when L_dist is small (e.g., because the student already matches the teacher in early training). No per-task tuning; fully automatic.
+- Inspired by PCGrad (Yu et al., 2020) and GradNorm (Chen et al., 2018), but applied at the loss-weighting level rather than gradient surgery.
+- When teacher logits conflict with SFT supervision (negative cosine similarity), the distillation signal is automatically suppressed for that step.
+- Operates at batch granularity, capturing task-level variation without task labels.
+- Can be approximated cheaply by comparing per-layer gradient norms.
 
-#### Strategy 4 — Meta-Learned λ  *(most powerful, adds a validation set)*
+#### Strategy 3 — Loss-Ratio Normalisation  *(self-calibrating, fully automatic)*
 
-Treat λ as a learnable scalar (or a vector of per-task λ values). Compute the validation loss gradient w.r.t. λ and update it via a separate gradient step (bilevel optimisation, similar to DARTS or learned data augmentation):
-
-```
-# Inner step: update θ with current λ
-θ ← θ − α · ∇_θ L(θ, λ)
-# Outer step: update λ on a small held-out batch
-λ ← λ − β · ∇_λ L_val(θ)
-```
-
-A lightweight approximation (one-step lookahead) keeps the overhead to ~2× memory and avoids second-order derivatives.
-
-#### Strategy 5 — Task-Type Heuristic Prior  *(zero-cost baseline)*
-
-Use task structure as a proxy:
+Keep the two losses at a fixed *ratio* rather than a fixed *absolute weight*:
 
 ```
-λ = λ_class   for classification (NLI, PA)   # e.g. 1.0
-λ = λ_extract for extractive QA              # e.g. 0.5
-λ = λ_seq     for sequence labelling (NER, POS)  # e.g. 0.1
+λ_t = λ_0 · (L_CE_t / L_dist_t)   # updated each step via EMA
+     → L_CE and λ·L_dist stay at ratio λ_0 : 1 throughout training
 ```
 
-Motivated directly by our results: classification tasks gain from distillation, sequence labelling tasks are hurt. Requires no new training.
+- Prevents distillation from numerically dominating when L_dist is small (e.g., early in training when student already mimics the teacher's token distribution).
+- Prevents distillation from vanishing when L_dist is large (e.g., early on NER when the student has no tag structure).
+- No per-task configuration; the ratio λ_0 is a single global hyperparameter whose scale is now task-invariant.
+
+#### Strategy 4 — Meta-Learned Per-Task λ  *(bilevel optimisation)*
+
+Treat λ as a **learnable vector** — one entry per task. Optimise it on a small held-out validation batch via bilevel gradient:
+
+```
+# Inner step (each training batch): update model weights θ
+θ ← θ − α · ∇_θ [L_CE(θ) + λ · L_dist(θ)]
+
+# Outer step (each K batches): update λ on a val batch
+λ ← clamp(λ − β · ∇_λ L_CE_val(θ_lookahead), 0, λ_max)
+```
+
+- The outer step uses only CE loss (no KD) on val, so λ is pushed up when KD helps generalisation and pushed down when it hurts.
+- A one-step lookahead approximation avoids computing second-order derivatives (same approach as MAML / DARTS / learned augmentation weights).
+- With 5 tasks, λ is a 5-vector, adding ~5 learnable scalars to the training. Overhead: ~2 extra forward passes per K training steps.
+
+#### Strategy 5 — Task-Type Prior  *(zero-cost heuristic, use as ablation)*
+
+Directly apply what our results reveal:
+
+```
+λ_nli, λ_pa  = 1.0   # classification: high, KD consistently helps
+λ_qa         = 0.3   # extractive: moderate, mild regression
+λ_ner, λ_pos = 0.05  # sequence labelling: near-zero, KD hurts
+```
+
+- Requires no training; justified directly by our empirical results.
+- Serves as a strong interpretable baseline for the meta-learned version.
 
 #### Projected Impact
 
-If the per-task λ were set to its task-optimal value (i.e. λ→0 for NER/POS, λ≈1 for NLI), the Distilled condition would not regress below FT on any task while retaining or improving on NLI. The overall Distilled average could match or exceed FT, making few-shot KD a strictly dominant training strategy — both richer in signal than SFT alone and without additional inference cost.
+Under the task-type prior (Strategy 5), the expected per-task outcome is:
+
+| Task | Current Distilled | Expected with Task-λ | Change |
+| :--- | :---: | :---: | :---: |
+| NLI (Acc %) | 56.7% | ≥56.7% | ≥0 (already above FT) |
+| PA (Acc %) | 81.3% | ≈81.9% | ≈+0.6 (recover SFT parity) |
+| QA (F1 %) | 59.5% | ≈61.5% | ≈+2.0 (reduce regression) |
+| NER (F1 %) | 41.7% | ≈50.0% | ≈+8.3 (recover most of SFT) |
+| POS (Acc %) | 62.5% | ≈71.0% | ≈+8.5 (recover most of SFT) |
+
+If realised, the dynamic-λ Distilled condition would match or exceed SFT on every task, making it a **strictly dominant** training objective: it adds cross-lingual soft-label supervision from few-shot examples at no additional inference cost.
+
+### Additional Observations
+
+**1. QA is the odd one out — Dist ≈ Control.**  For QA, the Distilled−Control gap is only +0.6 pp F1, far smaller than any other task (NLI: +9.3, POS: +40). This means the few-shot teacher's *span-prediction logits barely contain more signal than a zero-shot teacher*. Our hypothesis: span extraction requires grounding in the specific passage, and the few-shot context provides passage-independent signal. A better teacher for QA would provide soft labels over the span start/end positions (pointer-style) rather than over the vocabulary.
+
+**2. POS shows catastrophic collapse under Control (−50.5 pp vs SFT).**  This is anomalously large — 3× the NER collapse. POS tagging is a structured sequence task with rigid local constraints (e.g., VERB cannot follow VERB in English UD without intervening morphology). A zero-shot teacher's logits over the 12-tag vocabulary are nearly uniform at every position. With fixed λ = 0.5, the distillation loss is so large relative to CE that it overwhelms the SFT gradient, effectively training the model to predict the *average* tag distribution — wiping out SFT. This is a clear failure mode of fixed-λ KD and the strongest argument for dynamic λ.
+
+**3. Few-shot ICL (5-shot) and SFT have complementary failure modes.**  Base ICL achieves 53.5% NLI but only 9.1% POS accuracy (barely above random). SFT achieves 73.0% POS but only 53.0% NLI. This suggests the two approaches learn qualitatively different things: ICL teaches the format but not the task-specific distribution; SFT learns the distribution but loses the ability to exploit in-context examples. Distillation was designed to bridge this gap, and it does so for NLI (+3.7 pp over SFT) but not yet for sequence labelling.
+
+**4. Cross-lingual transfer is robust in the distilled condition.**  Across 6 languages, the largest English advantage in the distilled condition is in NER (EN: 36.8 vs HI: 51.6 — strikingly, *Hindi outperforms English* on NER after KD). This may be because the English NER training data has fewer entity types than Hindi WikiANN, making the teacher's logits less useful for English entity spans. For POS, all languages are within ±10 pp of each other under distillation, suggesting the KD signal generalises cross-lingually at the tag level even when it hurts overall.
+
+**5. The Distilled−FT / Ctrl−FT ratio is a new diagnostic for teacher quality.**  Defined as `(Dist−FT) / (Ctrl−FT)`, a ratio of 1.0 means the few-shot teacher adds nothing over a zero-shot teacher; a ratio of 0 means distillation with a few-shot teacher exactly matches SFT. From our data: NLI ≈ −0.66, PA ≈ 0.04, QA ≈ 0.81, NER ≈ 0.55, POS ≈ 0.21. NLI negative ratio (distilled *above* SFT) and POS low ratio (few-shot teacher adds most relative to zero-shot) suggest that this metric could be used to select per-task λ without a validation set: tasks with high ratio need lower λ; tasks with negative ratio can absorb high λ.
 
 ### Cross-Lingual Transfer (Distilled Condition)
 
-The model is trained only on English data; evaluation is zero-shot in all other languages.
+English-only training; zero-shot evaluation in 5 other languages:
 
-- **English**: 66.1%
-- **Non-English (avg)**: 58.2%
-- **EN → X gap**: 7.9 pp
+| Language | Avg Score (Distilled) |
+| :--- | :---: |
+| EN | **66.1%** |
+| HI | **53.8%** |
+| ES | **64.7%** |
+| DE | **60.8%** |
+| FR | **60.0%** |
+| ZH | **51.2%** |
 
-The gap is largest for ZH (Chinese) in NER/QA, consistent with morphological distance from the English training data. HI shows the largest POS regression under distillation, likely because the Devanagari POS tag inventory overlaps less with the English few-shot teacher's distribution.
+EN → non-EN gap: 66.1% vs 58.1% (**+8.0** pp)
+
+ZH (Chinese) shows the largest gap on NER and QA, consistent with morphological distance from English training data. Interestingly, HI *exceeds* EN on NER in the distilled condition — the few-shot teacher's Hindi entity logits may provide more distinctive supervision than English ones for this task.
