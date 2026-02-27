@@ -12,7 +12,7 @@ Auto-detects checkpoint type per condition:
 
 Run command (tmux: claude, INSIDE apptainer, after training is done):
   CUDA_VISIBLE_DEVICES=0,1 python scripts/eval_checkpoints.py \\
-      --config configs/base.yaml \\
+      --config configs/qwen1b7.yaml \\
       --n_samples 400 \\
       --output experiments/ablations/checkpoint_curve/results.json
 """
@@ -37,7 +37,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--config", type=str, default="configs/base.yaml")
+    parser.add_argument("--config", type=str, default="configs/qwen1b7.yaml")
     parser.add_argument("--n_samples", type=int, default=400,
                         help="Number of test examples to evaluate per checkpoint")
     parser.add_argument("--conditions", nargs="+",
@@ -45,7 +45,7 @@ def parse_args():
                         help="Condition names (subdirectory names under base_dir/)")
     parser.add_argument("--checkpoint_steps", nargs="+", type=int,
                         default=[200, 400, 600, 800, 1000])
-    parser.add_argument("--base_dir", type=str, default="experiments/poc",
+    parser.add_argument("--base_dir", type=str, default="experiments/qwen1b7",
                         help="Root dir containing condition subdirectories")
     parser.add_argument("--output", type=str,
                         default="experiments/ablations/checkpoint_curve/results.json")

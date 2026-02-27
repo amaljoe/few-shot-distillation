@@ -4,34 +4,34 @@ Final evaluation script for all conditions.
 Uses vLLM with LoRA adapter support for fast inference on the full GSM8K test set.
 
 Condition A: Base model (few-shot) — evaluated during Phase 0 (eval_icl.py)
-Condition B: Fine-tuned baseline — load from experiments/poc/baseline/checkpoint-N
-Condition C: Distilled model    — load from experiments/poc/distill/checkpoint-N
+Condition B: Fine-tuned baseline — load from experiments/qwen1b7/baseline/checkpoint-N
+Condition C: Distilled model    — load from experiments/qwen1b7/online_v1/checkpoint-N
 
 Run commands (tmux: vllm + claude on cn14-dgx):
 
   # Step 1: Start vLLM server with LoRA support
-  vllm serve Qwen/Qwen3-2B-Instruct \
+  vllm serve Qwen/Qwen3-1.7B \
       --enable-lora \
       --lora-modules \
-          baseline=experiments/poc/baseline/final \
-          distill=experiments/poc/distill/final \
+          baseline=experiments/qwen1b7/baseline/final \
+          online_v1=experiments/qwen1b7/online_v1/final \
       --port 8000 --tensor-parallel-size 2 \
       --max-lora-rank 16
 
   # Step 2: Run evaluation (tmux: claude)
   python scripts/evaluate.py \
-      --config configs/base.yaml \
+      --config configs/qwen1b7.yaml \
       --api_base http://localhost:8000/v1 \
-      --lora_names baseline distill \
-      --output experiments/poc/final_results.json
+      --lora_names baseline online_v1 \
+      --output experiments/qwen1b7/final_results.json
 
   # Or evaluate specific checkpoints:
   python scripts/evaluate.py \
-      --config configs/base.yaml \
+      --config configs/qwen1b7.yaml \
       --api_base http://localhost:8000/v1 \
-      --lora_names baseline distill \
+      --lora_names baseline online_v1 \
       --checkpoint_steps 100 200 300 400 500 600 700 800 900 1000 \
-      --output experiments/poc/checkpoint_results.json
+      --output experiments/qwen1b7/checkpoint_results.json
 """
 
 import argparse
@@ -51,7 +51,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--config", type=str, default="configs/base.yaml")
+    parser.add_argument("--config", type=str, default="configs/qwen1b7.yaml")
     parser.add_argument("--api_base", type=str, default="http://localhost:8000/v1")
     parser.add_argument("--lora_names", nargs="+", default=["baseline", "distill"],
                         help="Names of LoRA adapters loaded in vLLM server")

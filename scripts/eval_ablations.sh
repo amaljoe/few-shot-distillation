@@ -8,8 +8,8 @@
 #   bash scripts/eval_ablations.sh
 #
 # Output:
-#   experiments/poc/baseline_full_eval.json     (SFT checkpoint curve)
-#   experiments/ablations/ablation_eval.json    (0-shot + shuffled eval)
+#   experiments/qwen1b7/baseline_full_eval.json  (SFT checkpoint curve)
+#   experiments/ablations/ablation_eval.json     (0-shot + shuffled eval)
 
 set -e
 cd ~/workspace/icl-distillation
@@ -18,19 +18,19 @@ PYTHON=/dev/shm/vllm/bin/python
 
 echo "=== Step 1: Evaluate SFT baseline checkpoints ==="
 $PYTHON scripts/eval_checkpoints.py \
-    --config configs/base.yaml \
+    --config configs/qwen1b7.yaml \
     --n_samples 1319 \
     --conditions baseline \
-    --base_dir experiments/poc \
+    --base_dir experiments/qwen1b7 \
     --checkpoint_steps 200 400 600 800 1000 \
-    --output experiments/poc/baseline_full_eval.json \
+    --output experiments/qwen1b7/baseline_full_eval.json \
     --tensor_parallel_size 4 \
     --max_model_len 2048
 
 echo ""
 echo "=== Step 2: Evaluate ablation conditions ==="
 $PYTHON scripts/eval_checkpoints.py \
-    --config configs/base.yaml \
+    --config configs/qwen1b7.yaml \
     --n_samples 1319 \
     --conditions zeroshot_teacher shuffled_answers \
     --base_dir experiments/ablations \
@@ -41,5 +41,5 @@ $PYTHON scripts/eval_checkpoints.py \
 
 echo ""
 echo "=== Done. Files written: ==="
-echo "  experiments/poc/baseline_full_eval.json"
+echo "  experiments/qwen1b7/baseline_full_eval.json"
 echo "  experiments/ablations/ablation_eval.json"

@@ -9,7 +9,7 @@ Usage:
   python scripts/gen_ablation_fig.py
 
 Input files (all expected to exist after eval_ablations.sh runs):
-  experiments/poc/baseline_full_eval.json       -- SFT baseline curve
+  experiments/qwen1b7/baseline_full_eval.json   -- SFT baseline curve
   experiments/online_v1_full_eval.json          -- 8-shot teacher distill curve
   experiments/ablations/ablation_eval.json      -- 0-shot + shuffled ablations
 """
@@ -43,7 +43,7 @@ def main():
     out_dir = Path("assets")
     out_dir.mkdir(exist_ok=True)
 
-    sft_accs      = load_step_accs("experiments/poc/baseline_full_eval.json",     "baseline")
+    sft_accs      = load_step_accs("experiments/qwen1b7/baseline_full_eval.json", "baseline")
     fewshot_accs  = load_step_accs("experiments/online_v1_full_eval.json",         "online_v1")
     zeroshot_accs = load_step_accs("experiments/ablations/ablation_eval.json",     "zeroshot_teacher")
     shuffled_accs = load_step_accs("experiments/ablations/ablation_eval.json",     "shuffled_answers")

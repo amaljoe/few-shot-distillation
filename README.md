@@ -10,7 +10,39 @@ At inference, no context is needed.
 
 ---
 
+## Method
+
+```
+L_total = L_CE  +  λ · MSE( top-K teacher logits, student logits at same vocab indices )
+```
+
+**Token alignment.** Both teacher and student sequences end with the identical answer
+token IDs. The teacher processes `[8-shot context] + [question] + [answer]`; the student
+processes `[question] + [answer]`. For each answer token position `t`:
+
+```
+Teacher:  [shot₁]...[shot₈][question][answer_t₀][answer_t₁]...
+Student:                    [question][answer_t₀][answer_t₁]...
+                                       ↑↑↑ identical suffix ↑↑↑
+```
+
+**At every answer token**, we take the teacher's top-256 vocabulary logits and supervise
+the student to match them. This provides dense, position-wise signals across the full
+answer — average ~160 positions per GSM8K example.
+
+**Online teacher.** No precomputed cache. The teacher is the same base model (frozen,
+no LoRA), run live under `torch.no_grad()` during each training step. Both models share
+base weights; only LoRA parameters in the student are updated.
+
+---
+
 ## Results
+
+![Summary comparison across all models](assets/summary_comparison.png)
+
+*GSM8K accuracy (full test set, 1319 examples) for all four models and four methods.
+Distillation consistently outperforms LoRA SFT when the teacher has ICL knowledge
+(Qwen3 and Llama). Gemma-3-270M is a negative control with zero ICL gap.*
 
 Evaluated on the **full GSM8K test set (1319 examples)** using zero-shot inference
 (no context at test time for all fine-tuned models).
@@ -166,32 +198,6 @@ internalized into the student's weights. At inference, no context is needed.
 
 ---
 
-## Method
-
-```
-L_total = L_CE  +  λ · MSE( top-K teacher logits, student logits at same vocab indices )
-```
-
-**Token alignment.** Both teacher and student sequences end with the identical answer
-token IDs. The teacher processes `[8-shot context] + [question] + [answer]`; the student
-processes `[question] + [answer]`. For each answer token position `t`:
-
-```
-Teacher:  [shot₁]...[shot₈][question][answer_t₀][answer_t₁]...
-Student:                    [question][answer_t₀][answer_t₁]...
-                                       ↑↑↑ identical suffix ↑↑↑
-```
-
-**At every answer token**, we take the teacher's top-256 vocabulary logits and supervise
-the student to match them. This provides dense, position-wise signals across the full
-answer — average ~160 positions per GSM8K example.
-
-**Online teacher.** No precomputed cache. The teacher is the same base model (frozen,
-no LoRA), run live under `torch.no_grad()` during each training step. Both models share
-base weights; only LoRA parameters in the student are updated.
-
----
-
 ## Checkpoint Accuracy Curves
 
 ### Qwen3-1.7B — GSM8K accuracy (1319 examples)
@@ -297,36 +303,161 @@ pip install torch transformers datasets peft accelerate omegaconf \
 4×A100 80GB. Start via `app` alias → apptainer → activate `/dev/shm/vllm` env.
 See `compute.md` for full environment notes.
 
-### Step 1 — Train LoRA SFT baseline
+### Step 0 — Evaluate ICL baseline (all models)
 
+```bash
+# Run on a single GPU; repeat for each model to confirm ICL gap before training
+CUDA_VISIBLE_DEVICES=0 python scripts/eval_icl.py \
+    --model Qwen/Qwen3-1.7B --n_samples 1319
+CUDA_VISIBLE_DEVICES=0 python scripts/eval_icl.py \
+    --model Qwen/Qwen3-8B --n_samples 1319
+CUDA_VISIBLE_DEVICES=0 python scripts/eval_icl.py \
+    --model meta-llama/Llama-3.2-3B-Instruct --n_samples 1319
+CUDA_VISIBLE_DEVICES=0 python scripts/eval_icl.py \
+    --model google/gemma-3-270m --n_samples 1319
+```
+
+---
+
+### Qwen3-1.7B
+
+Uses `configs/qwen1b7.yaml` and `configs/online_v1.yaml`. Outputs to `experiments/qwen1b7/`.
+
+**Step 1 — Train LoRA SFT baseline**
 ```bash
 # GPUs 0,1
 CUDA_VISIBLE_DEVICES=0,1 accelerate launch \
     --num_processes 2 --mixed_precision bf16 --main_process_port 29500 \
-    src/training/train_baseline.py --config configs/base.yaml \
-    --output_dir experiments/poc/baseline
+    src/training/train_baseline.py --config configs/qwen1b7.yaml \
+    --output_dir experiments/qwen1b7/baseline
 ```
 
-### Step 2 — Train with Few-Shot Distillation
-
+**Step 2 — Train with Few-Shot Distillation** (can run in parallel on GPUs 2,3)
 ```bash
-# GPUs 0,1  (online teacher runs on same GPUs, frozen)
-CUDA_VISIBLE_DEVICES=0,1 accelerate launch \
-    --num_processes 2 --mixed_precision bf16 --main_process_port 29500 \
+# GPUs 2,3
+CUDA_VISIBLE_DEVICES=2,3 accelerate launch \
+    --num_processes 2 --mixed_precision bf16 --main_process_port 29501 \
     src/training/train_online_v1.py --config configs/online_v1.yaml \
-    --output_dir experiments/online_v1
+    --output_dir experiments/qwen1b7/online_v1
 ```
 
-### Step 3 — Evaluate checkpoints
-
+**Step 3 — Evaluate checkpoints**
 ```bash
 CUDA_VISIBLE_DEVICES=0,1,2,3 python scripts/eval_checkpoints.py \
-    --config configs/base.yaml \
+    --config configs/qwen1b7.yaml \
     --n_samples 1319 \
-    --conditions online_v1 \
-    --base_dir experiments \
+    --conditions baseline online_v1 \
+    --base_dir experiments/qwen1b7 \
     --checkpoint_steps 200 400 600 800 1000 \
-    --output experiments/online_v1_full_eval.json \
+    --output experiments/qwen1b7/results.json \
+    --tensor_parallel_size 4
+```
+
+---
+
+### Qwen3-8B
+
+Uses `configs/qwen8b.yaml` and `configs/online_v1_qwen8b.yaml`. Outputs to `experiments/qwen8b/`.
+
+**Step 1 — Train LoRA SFT baseline**
+```bash
+# GPUs 0,1
+CUDA_VISIBLE_DEVICES=0,1 accelerate launch \
+    --num_processes 2 --mixed_precision bf16 --main_process_port 29500 \
+    src/training/train_baseline.py --config configs/qwen8b.yaml \
+    --output_dir experiments/qwen8b/baseline
+```
+
+**Step 2 — Train with Few-Shot Distillation** (can run in parallel on GPUs 2,3)
+```bash
+# GPUs 2,3
+CUDA_VISIBLE_DEVICES=2,3 accelerate launch \
+    --num_processes 2 --mixed_precision bf16 --main_process_port 29501 \
+    src/training/train_online_v1.py --config configs/online_v1_qwen8b.yaml \
+    --output_dir experiments/qwen8b/online_v1
+```
+
+**Step 3 — Evaluate checkpoints**
+```bash
+CUDA_VISIBLE_DEVICES=0,1,2,3 python scripts/eval_checkpoints.py \
+    --config configs/qwen8b.yaml \
+    --n_samples 1319 \
+    --conditions baseline online_v1 \
+    --base_dir experiments/qwen8b \
+    --checkpoint_steps 200 400 600 800 1000 \
+    --output experiments/qwen8b/results.json \
+    --tensor_parallel_size 4
+```
+
+---
+
+### Llama-3.2-3B-Instruct
+
+Uses `configs/llama3b.yaml` and `configs/online_v1_llama.yaml`. Outputs to `experiments/llama3b/`.
+
+**Step 1 — Train LoRA SFT baseline**
+```bash
+# GPUs 0,1
+CUDA_VISIBLE_DEVICES=0,1 accelerate launch \
+    --num_processes 2 --mixed_precision bf16 --main_process_port 29500 \
+    src/training/train_baseline.py --config configs/llama3b.yaml \
+    --output_dir experiments/llama3b/baseline
+```
+
+**Step 2 — Train with Few-Shot Distillation** (can run in parallel on GPUs 2,3)
+```bash
+# GPUs 2,3
+CUDA_VISIBLE_DEVICES=2,3 accelerate launch \
+    --num_processes 2 --mixed_precision bf16 --main_process_port 29501 \
+    src/training/train_online_v1.py --config configs/online_v1_llama.yaml \
+    --output_dir experiments/llama3b/online_v1
+```
+
+**Step 3 — Evaluate checkpoints**
+```bash
+CUDA_VISIBLE_DEVICES=0,1,2,3 python scripts/eval_checkpoints.py \
+    --config configs/llama3b.yaml \
+    --n_samples 1319 \
+    --conditions baseline online_v1 \
+    --base_dir experiments/llama3b \
+    --checkpoint_steps 200 400 600 800 1000 \
+    --output experiments/llama3b/results.json \
+    --tensor_parallel_size 4
+```
+
+---
+
+### Gemma-3-270M (full fine-tuning)
+
+Uses `configs/gemma270m.yaml` and `configs/gemma270m_distill.yaml`. Full fine-tuning (no LoRA). Outputs to `experiments/gemma270m/`.
+
+**Step 1 — Train Full-FT SFT baseline**
+```bash
+# GPUs 0,1
+CUDA_VISIBLE_DEVICES=0,1 accelerate launch \
+    --num_processes 2 --mixed_precision bf16 --main_process_port 29500 \
+    src/training/train_baseline.py --config configs/gemma270m.yaml \
+    --output_dir experiments/gemma270m/baseline
+```
+
+**Step 2 — Train with Few-Shot Distillation** (can run in parallel on GPUs 2,3)
+```bash
+# GPUs 2,3
+CUDA_VISIBLE_DEVICES=2,3 accelerate launch \
+    --num_processes 2 --mixed_precision bf16 --main_process_port 29501 \
+    src/training/train_online_v1.py --config configs/gemma270m_distill.yaml \
+    --output_dir experiments/gemma270m/online_v1
+```
+
+**Step 3 — Evaluate checkpoints**
+```bash
+CUDA_VISIBLE_DEVICES=0,1,2,3 python scripts/eval_checkpoints.py \
+    --config configs/gemma270m.yaml \
+    --n_samples 1319 \
+    --conditions baseline online_v1 \
+    --base_dir experiments/gemma270m \
+    --checkpoint_steps 200 400 600 800 1000 \
+    --output experiments/gemma270m/results.json \
     --tensor_parallel_size 4
 ```
 
@@ -336,15 +467,17 @@ CUDA_VISIBLE_DEVICES=0,1,2,3 python scripts/eval_checkpoints.py \
 
 ```
 configs/
-├── base.yaml                       # Qwen3-1.7B: model, data, training, LoRA hyperparameters
+├── qwen1b7.yaml                    # Qwen3-1.7B: model, data, training, LoRA hyperparameters
 ├── online_v1.yaml                  # Qwen3-1.7B: few-shot distillation overrides (λ, top-K)
+├── qwen8b.yaml                     # Qwen3-8B: model + training hyperparameters
+├── online_v1_qwen8b.yaml           # Qwen3-8B: few-shot distillation overrides
 ├── llama3b.yaml                    # Llama-3.2-3B-Instruct: model + training
 ├── online_v1_llama.yaml            # Llama-3.2-3B-Instruct: distillation overrides
 ├── gemma270m.yaml                  # Gemma-3-270M: full fine-tuning (use_lora: false)
 ├── gemma270m_distill.yaml          # Gemma-3-270M: 8-shot distillation overrides
 ├── gemma270m_ablation_zeroshot.yaml # Gemma-3-270M: 0-shot teacher control
-├── ablation_zeroshot_teacher.yaml  # Qwen3: 0-shot teacher control (causal ablation)
-└── ablation_shuffled_answers.yaml  # Qwen3: shuffled-answer control (causal ablation)
+├── ablation_zeroshot_teacher.yaml  # Qwen3-1.7B: 0-shot teacher control (causal ablation)
+└── ablation_shuffled_answers.yaml  # Qwen3-1.7B: shuffled-answer control (causal ablation)
 
 src/
 ├── data/
@@ -360,14 +493,15 @@ src/
 scripts/
 ├── eval_checkpoints.py      # checkpoint accuracy curve (auto-detects LoRA vs full-FT)
 ├── eval_icl.py              # 0-shot and few-shot ICL evaluation
+├── gen_summary_fig.py       # Cross-model summary comparison figure
 ├── gen_main_fig.py          # Qwen3-1.7B comparison figure
 ├── gen_llama_fig.py         # Llama-3.2-3B-Instruct comparison figure
 ├── gen_loss_fig.py          # CE loss convergence figure
 ├── gen_ablation_fig_local.py # Ablation accuracy curve + bar chart
-├── gen_gemma_fig.py         # Gemma-3-270M comparison + curve figures
-└── merge_gemma_evals.py     # Merge Gemma per-condition eval JSONs into one file
+└── gen_gemma_fig.py         # Gemma-3-270M comparison + curve figures
 
 assets/
+├── summary_comparison.png   # Cross-model: all 4 models × 4 methods
 ├── main_comparison.png      # Qwen3-1.7B: base / ICL / SFT / distillation
 ├── llama_comparison.png     # Llama-3.2-3B-Instruct: base / ICL / SFT / distillation
 ├── loss_comparison.png      # CE loss convergence: SFT vs distillation (Qwen3-1.7B)

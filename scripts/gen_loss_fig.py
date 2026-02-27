@@ -40,7 +40,7 @@ plt.rcParams.update({
 })
 
 # ── load CE loss from TensorBoard ────────────────────────────────────────────
-baseline_tb = "experiments/poc/baseline/baseline/tb_logs"
+baseline_tb = "experiments/qwen1b7/baseline/baseline/tb_logs"
 v1_tb       = "experiments/online_v1/online_v1/tb_logs"
 
 baseline_loss = merge_tb([baseline_tb], "train/ce_loss")
