@@ -8,6 +8,9 @@
 set -euo pipefail
 cd /home/compiling-ganesh/24m0797/workspace/icl-distillation
 
+export TRANSFORMERS_OFFLINE=1
+export HF_DATASETS_OFFLINE=1
+
 LOGDIR="experiments/xtreme/logs"
 mkdir -p "$LOGDIR"
 timestamp() { date '+%Y-%m-%d %H:%M:%S'; }

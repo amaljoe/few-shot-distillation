@@ -48,6 +48,17 @@ def parse_args():
     parser.add_argument("--output_dir", type=str, default=None)
     parser.add_argument("--zeroshot_teacher", action="store_true",
                         help="Control condition: teacher uses zero-shot context")
+    # Lambda sweep overrides
+    parser.add_argument("--lambda_distill", type=float, default=None,
+                        help="Override distillation.lambda_distill from config")
+    parser.add_argument("--tasks", type=str, nargs="+", default=None,
+                        help="Override data.tasks (e.g. --tasks pos ner)")
+    parser.add_argument("--condition_name", type=str, default=None,
+                        help="Override condition name used for output subdirectory")
+    parser.add_argument("--max_steps", type=int, default=None,
+                        help="Override training.max_steps from config")
+    parser.add_argument("--per_device_batch_size", type=int, default=None,
+                        help="Override training.per_device_train_batch_size from config")
     return parser.parse_args()
 
 
@@ -79,7 +90,20 @@ def main():
     dist_cfg  = OmegaConf.load(args.config)
     cfg = OmegaConf.merge(base_cfg, dist_cfg)
 
-    condition_name = "xtreme_control" if args.zeroshot_teacher else "xtreme_distill"
+    # CLI overrides for sweep
+    if args.lambda_distill is not None:
+        cfg.distillation.lambda_distill = args.lambda_distill
+    if args.tasks is not None:
+        cfg.data.tasks = args.tasks
+    if args.max_steps is not None:
+        cfg.training.max_steps = args.max_steps
+    if args.per_device_batch_size is not None:
+        cfg.training.per_device_train_batch_size = args.per_device_batch_size
+
+    if args.condition_name:
+        condition_name = args.condition_name
+    else:
+        condition_name = "xtreme_control" if args.zeroshot_teacher else "xtreme_distill"
     output_dir = Path(args.output_dir or cfg.training.output_dir) / condition_name
     output_dir.mkdir(parents=True, exist_ok=True)
 
