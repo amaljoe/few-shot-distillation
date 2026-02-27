@@ -131,3 +131,11 @@ Full-FT vs LoRA auto-detection: presence of `adapter_config.json` in the checkpo
 **Parallel training ports**: use `--main_process_port 29500` on GPUs 0,1 and `--main_process_port 29501` on GPUs 2,3 to avoid collision when running two accelerate jobs simultaneously.
 
 **GSM8K answer extraction**: `re.search(r"####\s*([\d,]+)", text)` — this pattern is used in eval scripts and must match the model's output format.
+
+## Paper Compilation
+
+The paper lives in `paper/` (gitignored).
+
+### Compile PDF (must be inside the apptainer container)
+
+`pdflatex` is only available inside the apptainer container (`app` alias). LaTeX packages are installed in `~/images/mine.def` (texlive-latex-base, texlive-latex-extra, texlive-fonts-extra, texlive-bibtex-extra, texlive-science, cm-super, etc.).
