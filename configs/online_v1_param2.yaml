@@ -1,0 +1,10 @@
+# Online logit distillation overrides for Param2-17B-A2.4B-Thinking
+# Inherits from param2_17b.yaml
+
+distillation:
+  n_top_logits: 256
+  lambda_distill: 0.5
+  normalize_logits: false
+
+training:
+  save_steps: 200

@@ -147,6 +147,7 @@ def main():
 
     if cfg.training.gradient_checkpointing:
         model.gradient_checkpointing_enable()
+        model.enable_input_require_grads()  # required for PEFT+grad-ckpt
 
     optimizer = AdamW(
         student_wrapper.get_trainable_parameters(),
@@ -162,6 +163,11 @@ def main():
     model, optimizer, train_loader, scheduler = accelerator.prepare(
         model, optimizer, train_loader, scheduler
     )
+
+    # Re-enable input require grads after DDP wrapping (DDP may reset hooks set before prepare).
+    # This is required for gradient checkpointing + PEFT LoRA to work correctly.
+    if cfg.training.gradient_checkpointing:
+        accelerator.unwrap_model(model).enable_input_require_grads()
 
     K_vocab = cfg.distillation.n_top_logits
     lam = cfg.distillation.lambda_distill
@@ -202,6 +208,15 @@ def main():
                 labels=batch.labels,
             )
             ce_loss = student_out.loss
+            if ce_loss is None:
+                # Fallback: compute CE loss manually (shouldn't happen, but guard against it)
+                shift_logits = student_out.logits[..., :-1, :].contiguous()
+                shift_labels = batch.labels[..., 1:].contiguous().to(device)
+                ce_loss = torch.nn.functional.cross_entropy(
+                    shift_logits.view(-1, shift_logits.size(-1)),
+                    shift_labels.view(-1),
+                    ignore_index=-100,
+                )
 
             b_idx, t_ans_idx, s_ans_idx, ans_valid, n_ans = answer_alignment(
                 t_lens, labels_d, device

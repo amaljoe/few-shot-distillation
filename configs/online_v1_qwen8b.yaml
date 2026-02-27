@@ -1,0 +1,10 @@
+# Online logit distillation overrides for Qwen3-8B
+# Inherits from qwen8b.yaml
+
+distillation:
+  n_top_logits: 256
+  lambda_distill: 0.5
+  normalize_logits: false
+
+training:
+  save_steps: 200

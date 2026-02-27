@@ -151,6 +151,7 @@ def main():
 
     if cfg.training.gradient_checkpointing:
         model.gradient_checkpointing_enable()
+        model.enable_input_require_grads()  # required for PEFT+grad-ckpt
 
     optimizer = AdamW(
         student_wrapper.get_trainable_parameters(),

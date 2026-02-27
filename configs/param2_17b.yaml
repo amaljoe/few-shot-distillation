@@ -1,0 +1,55 @@
+# Base configuration for Param2-17B-A2.4B-Thinking experiments
+#
+# Architecture: Param2MoE (custom, trust_remote_code=True required)
+#   - 21 hidden layers
+#   - hidden_size: 2048
+#   - 64 total experts, 6 active per token + 2 shared experts
+#   - Effective active params per token: ~2.4B
+#   - Attention: fused query_key_value projection (not separate q/k/v)
+#   - Output proj: dense (not o_proj)
+#   - MoE MLP: gate_proj, up_proj, down_proj (standard naming)
+#   - Context length: 4096 tokens
+#   - thinking mode: has <think>/<\think> tokens, can emit reasoning chains
+
+model:
+  name: "bharatgenai/Param2-17B-A2.4B-Thinking"
+  num_layers: 21
+  hidden_size: 2048
+  thinking_mode: false              # disable via system prompt; model generates <think> by default
+
+data:
+  dataset: "gsm8k"
+  subset: "main"
+  train_split: "train"
+  test_split: "test"
+  num_fewshot_examples: 8
+  max_seq_len_teacher: 4096         # model max_position_embeddings = 4096
+  max_seq_len_student: 512
+  num_workers: 4
+
+training:
+  seed: 42
+  output_dir: "experiments/param2_17b"
+  logging_steps: 10
+  save_steps: 200
+  max_steps: 1000
+  warmup_steps: 50
+  lr: 2.0e-4
+  weight_decay: 0.01
+  grad_clip: 1.0
+  per_device_train_batch_size: 1    # MoE: 34GB model + 34GB teacher = 68GB/GPU; batch=1 to be safe
+  gradient_accumulation_steps: 16   # 1 * 2 GPUs * 16 = 32 effective batch
+  bf16: true
+  gradient_checkpointing: true     # reduces activation memory for large model
+
+lora:
+  r: 16
+  alpha: 32
+  dropout: 0.05
+  target_modules:
+    - query_key_value              # fused QKV projection (Param2MoE attention)
+    - dense                        # output projection (equivalent to o_proj)
+    - gate_proj                    # MoE expert MLP gate
+    - up_proj                      # MoE expert MLP up
+    - down_proj                    # MoE expert MLP down
+  bias: "none"

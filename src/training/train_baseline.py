@@ -93,6 +93,7 @@ def main():
 
     if cfg.training.gradient_checkpointing:
         model.gradient_checkpointing_enable()
+        model.enable_input_require_grads()  # required for PEFT+grad-ckpt
 
     # Optimizer and scheduler
     optimizer = AdamW(
