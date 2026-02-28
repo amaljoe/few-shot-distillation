@@ -1,19 +1,22 @@
 """
-Evaluate all 5 distillation-at-end checkpoints on GSM8K (zero-shot)
+Evaluate all 5 distillation-at-end checkpoints on a dataset (zero-shot)
 and produce one accuracy-vs-distill-steps plot.
 
 Reads LoRA adapters from:
-  experiments/distill_steps_end/steps_{N}/final/
+  experiments/distill_steps_end_{dataset}/steps_{N}/final/
   for N in [0, 4, 16, 64, 200]
 
 Writes:
-  experiments/distill_steps_end/eval_results.json
-  experiments/distill_steps_end/distill_steps_end_accuracy.png
+  experiments/distill_steps_end_{dataset}/eval_results.json
+  experiments/distill_steps_end_{dataset}/distill_steps_end_accuracy.png
 
 Usage:
-  CUDA_VISIBLE_DEVICES=0,1,2,3 python scripts/eval_plot_distill_steps_end.py
+  CUDA_VISIBLE_DEVICES=0,1,2,3 python scripts/eval_plot_distill_steps_end.py --dataset commonsenseqa
+  CUDA_VISIBLE_DEVICES=0,1,2,3 python scripts/eval_plot_distill_steps_end.py --dataset math
+  CUDA_VISIBLE_DEVICES=0,1,2,3 python scripts/eval_plot_distill_steps_end.py           # gsm8k default
 """
 
+import argparse
 import json
 import random
 import re
@@ -23,7 +26,6 @@ from pathlib import Path
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-from datasets import load_dataset
 from transformers import AutoTokenizer
 from vllm import LLM, SamplingParams
 from vllm.lora.request import LoRARequest
@@ -32,29 +34,105 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 MODEL_NAME     = "Qwen/Qwen3-1.7B"
 DISTILL_STEPS  = [0, 4, 16, 64, 200]
-BASE_DIR       = Path("experiments/distill_steps_end")
-N_SAMPLES      = 1319
 SEED           = 42
 MAX_NEW_TOKENS = 512
-MAX_MODEL_LEN  = 2048
 TP_SIZE        = 4
 
+# Per-dataset configuration
+DATASET_CFG = {
+    "gsm8k": {
+        "base_dir":      Path("experiments/distill_steps_end"),
+        "eval_split":    "test",
+        "n_samples":     1319,
+        "max_model_len": 2048,
+        "ylabel":        "GSM8K zero-shot accuracy (%)",
+        "title_dataset": "GSM8K",
+    },
+    "commonsenseqa": {
+        "base_dir":      Path("experiments/distill_steps_end_csqa"),
+        "eval_split":    "validation",
+        "n_samples":     9999,   # use full validation set (~1221 examples)
+        "max_model_len": 1024,
+        "ylabel":        "CommonsenseQA zero-shot accuracy (%)",
+        "title_dataset": "CommonsenseQA",
+    },
+    "math": {
+        "base_dir":      Path("experiments/distill_steps_end_math"),
+        "eval_split":    "test",
+        "n_samples":     1319,
+        "max_model_len": 4096,
+        "ylabel":        "MATH zero-shot accuracy (%)",
+        "title_dataset": "MATH",
+    },
+}
 
-def extract_answer(text: str) -> str | None:
-    match = re.search(r"####\s*([\d,]+)", text)
-    if match:
-        return match.group(1).replace(",", "").strip()
-    numbers = re.findall(r"\b\d+\b", text)
-    return numbers[-1] if numbers else None
+
+# ── Dataset loading ────────────────────────────────────────────────────────────
+
+def load_test_data(dataset: str, split: str, n_samples: int, seed: int):
+    if dataset == "gsm8k":
+        from datasets import load_dataset
+        data = list(load_dataset("gsm8k", "main")[split])
+    elif dataset == "commonsenseqa":
+        from src.data.commonsenseqa_loader import load_commonsenseqa
+        data = list(load_commonsenseqa(split))
+    elif dataset == "math":
+        from src.data.math_loader import load_math
+        data = list(load_math(split))
+    else:
+        raise ValueError(f"Unknown dataset: {dataset}")
+
+    if n_samples < len(data):
+        data = random.Random(seed).sample(data, n_samples)
+    return data
 
 
-def get_ground_truth(example: dict) -> str:
-    match = re.search(r"####\s*([\d,]+)", example["answer"])
-    return match.group(1).replace(",", "").strip() if match else ""
+# ── Per-dataset answer extraction and ground truth ────────────────────────────
+
+def get_extract_gt_fns(dataset: str):
+    if dataset == "gsm8k":
+        def extract(text):
+            m = re.search(r"####\s*([\d,]+)", text)
+            if m:
+                return m.group(1).replace(",", "").strip()
+            nums = re.findall(r"\b\d+\b", text)
+            return nums[-1] if nums else None
+
+        def gt(ex):
+            m = re.search(r"####\s*([\d,]+)", ex["answer"])
+            return m.group(1).replace(",", "").strip() if m else ""
+
+    elif dataset == "commonsenseqa":
+        from src.data.commonsenseqa_loader import extract_answer, get_ground_truth
+        extract = extract_answer
+        gt      = get_ground_truth
+
+    elif dataset == "math":
+        from src.data.math_loader import extract_answer, get_ground_truth
+        extract = extract_answer
+        gt      = get_ground_truth
+
+    else:
+        raise ValueError(f"Unknown dataset: {dataset}")
+
+    return extract, gt
 
 
-def build_zeroshot_prompt(tokenizer, example: dict) -> str:
-    messages = [{"role": "user", "content": f"Question: {example['question']}"}]
+# ── Zero-shot prompt builders ─────────────────────────────────────────────────
+
+def build_prompt(tokenizer, example: dict, dataset: str) -> str:
+    if dataset == "gsm8k":
+        messages = [{"role": "user", "content": f"Question: {example['question']}"}]
+    elif dataset == "commonsenseqa":
+        from src.data.commonsenseqa_loader import format_choices
+        choices_str = format_choices(example["choices"])
+        messages = [{"role": "user",
+                     "content": f"Question: {example['question']}\n{choices_str}"}]
+    elif dataset == "math":
+        messages = [{"role": "user", "content": f"Problem: {example['problem']}"}]
+    else:
+        raise ValueError(f"Unknown dataset: {dataset}")
+
     try:
         return tokenizer.apply_chat_template(
             messages, tokenize=False, add_generation_prompt=True,
@@ -66,29 +144,38 @@ def build_zeroshot_prompt(tokenizer, example: dict) -> str:
         )
 
 
+# ── Main ──────────────────────────────────────────────────────────────────────
+
+def parse_args():
+    p = argparse.ArgumentParser()
+    p.add_argument("--dataset", default="gsm8k",
+                   choices=["gsm8k", "commonsenseqa", "math"])
+    return p.parse_args()
+
+
 def main():
-    random.seed(SEED)
+    args  = parse_args()
+    dcfg  = DATASET_CFG[args.dataset]
+    BASE_DIR = dcfg["base_dir"]
 
     print(f"\n{'='*60}")
-    print(f" Distillation steps ablation (END) — GSM8K zero-shot eval")
+    print(f" Distillation steps ablation (END) — {dcfg['title_dataset']} zero-shot eval")
     print(f"   Model      : {MODEL_NAME}")
-    print(f"   Conditions : {DISTILL_STEPS} (final N steps distilled)")
-    print(f"   Samples    : {N_SAMPLES}")
+    print(f"   Conditions : {DISTILL_STEPS}")
     print(f"{'='*60}\n")
 
-    print("Loading GSM8K test set …")
-    dataset   = load_dataset("gsm8k", "main")
-    test_data = list(dataset["test"])
-    if N_SAMPLES < len(test_data):
-        test_data = random.sample(test_data, N_SAMPLES)
+    # ── Load test data ─────────────────────────────────────────────────────────
+    print(f"Loading {args.dataset} {dcfg['eval_split']} set …")
+    test_data = load_test_data(args.dataset, dcfg["eval_split"], dcfg["n_samples"], SEED)
     print(f"  {len(test_data)} examples\n")
 
     tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME, trust_remote_code=True)
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
 
-    prompts       = [build_zeroshot_prompt(tokenizer, ex) for ex in test_data]
-    ground_truths = [get_ground_truth(ex) for ex in test_data]
+    prompts       = [build_prompt(tokenizer, ex, args.dataset) for ex in test_data]
+    extract_fn, gt_fn = get_extract_gt_fns(args.dataset)
+    ground_truths = [gt_fn(ex) for ex in test_data]
 
     # ── Discover available adapters ────────────────────────────────────────────
     available = []
@@ -100,18 +187,19 @@ def main():
             print(f"[skip] {adapter_path} not found or missing adapter_config.json")
 
     if not available:
-        print("No adapters found. Run distill_steps_end_experiment.py first.")
+        print(f"No adapters found under {BASE_DIR}. Run training first.")
         return
 
     print(f"Evaluating conditions: {available}\n")
 
+    # ── vLLM — load base model once, swap LoRA adapters ───────────────────────
     print("Initializing vLLM …")
     llm = LLM(
         model=MODEL_NAME,
         enable_lora=True,
         max_lora_rank=16,
         tensor_parallel_size=TP_SIZE,
-        max_model_len=MAX_MODEL_LEN,
+        max_model_len=dcfg["max_model_len"],
         trust_remote_code=True,
         dtype="bfloat16",
         gpu_memory_utilization=0.85,
@@ -121,7 +209,7 @@ def main():
     results = {}
     for i, n_distill in enumerate(available):
         adapter_path = str(BASE_DIR / f"steps_{n_distill}" / "final")
-        lora_req = LoRARequest(f"end_steps_{n_distill}", i + 1, adapter_path)
+        lora_req = LoRARequest(f"{args.dataset}_end_{n_distill}", i + 1, adapter_path)
 
         distill_start = 200 - n_distill
         label = "SFT only" if n_distill == 0 else f"distill steps {distill_start}–199"
@@ -131,7 +219,7 @@ def main():
 
         correct = 0
         for output, gt in zip(outputs, ground_truths):
-            pred = extract_answer(output.outputs[0].text)
+            pred = extract_fn(output.outputs[0].text)
             correct += int(pred == gt if pred is not None else False)
 
         acc = correct / len(test_data)
@@ -162,7 +250,6 @@ def main():
         x_labels[-1] = f"{x_vals[-1]}\n(full distill)"
 
     fig, ax = plt.subplots(figsize=(8, 5))
-
     ax.plot(x_pos, y_vals, "o-", color="#F44336", linewidth=2.5, markersize=9,
             markerfacecolor="white", markeredgewidth=2.5, markeredgecolor="#F44336")
 
@@ -174,10 +261,10 @@ def main():
     ax.set_xticks(x_pos)
     ax.set_xticklabels(x_labels, fontsize=10)
     ax.set_xlabel("Number of distillation steps applied at end of training", fontsize=11)
-    ax.set_ylabel("GSM8K zero-shot accuracy (%)", fontsize=11)
+    ax.set_ylabel(dcfg["ylabel"], fontsize=11)
     ax.set_title(
-        "Does distillation timing matter?  (applied at END)\n"
-        "(Qwen3-1.7B, LoRA, 200 total steps)",
+        f"Does distillation timing matter?  (applied at END)\n"
+        f"({dcfg['title_dataset']}, Qwen3-1.7B, LoRA, 200 total steps)",
         fontsize=13, fontweight="bold", pad=10,
     )
     ax.grid(alpha=0.3, axis="y")

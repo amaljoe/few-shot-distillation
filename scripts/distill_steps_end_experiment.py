@@ -1,20 +1,23 @@
 """
 Distillation timing ablation: distillation applied at the END of training.
 
-Trains Qwen3-1.7B (LoRA) for 200 steps total on GSM8K.
+Trains Qwen3-1.7B (LoRA) for 200 steps total.
   Steps 0 .. (200 - distill_steps - 1) : CE only      (standard SFT)
   Steps (200 - distill_steps) .. 199   : CE + λ·MSE  (top-K logit distillation)
 
-For distill_steps=0  → pure SFT throughout (identical to start-variant with 0).
-For distill_steps=200 → full distillation throughout (identical to start-variant with 200).
+For distill_steps=0  → pure SFT throughout.
+For distill_steps=200 → full distillation throughout.
+
+Supports --dataset gsm8k | commonsenseqa | math
 
 Usage (run from project root inside the apptainer container):
   CUDA_VISIBLE_DEVICES=0,1,2,3 accelerate launch \\
       --num_processes 4 --mixed_precision bf16 --main_process_port 29500 \\
-      scripts/distill_steps_end_experiment.py --distill_steps 16
+      scripts/distill_steps_end_experiment.py --distill_steps 16 --dataset commonsenseqa
 
-Run all 5 conditions via:
-  bash scripts/run_distill_steps_end.sh
+Run all conditions via:
+  bash scripts/run_distill_steps_end.sh           # gsm8k only
+  bash scripts/run_distill_steps_end_math_csqa.sh # math + commonsenseqa
 """
 
 import argparse
@@ -25,33 +28,39 @@ from pathlib import Path
 import torch
 from peft import LoraConfig, TaskType, get_peft_model
 from torch.optim import AdamW
-from torch.utils.data import DataLoader
 from tqdm import tqdm
 from transformers import AutoModelForCausalLM, AutoTokenizer, get_cosine_schedule_with_warmup
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from accelerate import Accelerator
-from src.data.gsm8k_loader import (
-    GSM8KDistillDataset,
-    collate_fn,
-    load_gsm8k,
-)
+from src.data.loader_factory import load_dataset_split, make_dataloader
 
 # ── Hyperparameters ────────────────────────────────────────────────────────────
-MODEL_NAME      = "Qwen/Qwen3-1.7B"
-NUM_FEWSHOT     = 8
-MAX_SEQ_STUDENT = 512
-MAX_SEQ_TEACHER = 4096
-TRAIN_STEPS     = 200
-BATCH_SIZE      = 4         # per device
-LR              = 2e-4
-WARMUP_STEPS    = 20
-WEIGHT_DECAY    = 0.01
-GRAD_CLIP       = 1.0
-SEED            = 42
-K_VOCAB         = 256
-LAM_DISTILL     = 0.5
+MODEL_NAME   = "Qwen/Qwen3-1.7B"
+TRAIN_STEPS  = 200
+BATCH_SIZE   = 4         # per device
+LR           = 2e-4
+WARMUP_STEPS = 20
+WEIGHT_DECAY = 0.01
+GRAD_CLIP    = 1.0
+SEED         = 42
+K_VOCAB      = 256
+LAM_DISTILL  = 0.5
+
+# Per-dataset sequence lengths and few-shot counts (matching loader defaults)
+DATASET_CFG = {
+    "gsm8k":         {"num_fewshot": 8, "max_seq_teacher": 4096, "max_seq_student": 512},
+    "commonsenseqa": {"num_fewshot": 5, "max_seq_teacher": 1024, "max_seq_student": 256},
+    "math":          {"num_fewshot": 4, "max_seq_teacher": 6144, "max_seq_student": 1024},
+}
+
+# Default output directories (gsm8k keeps its original path for backward compat)
+DEFAULT_OUTPUT = {
+    "gsm8k":         "experiments/distill_steps_end",
+    "commonsenseqa": "experiments/distill_steps_end_csqa",
+    "math":          "experiments/distill_steps_end_math",
+}
 
 LORA_KWARGS = dict(
     r=16,
@@ -87,7 +96,10 @@ def parse_args():
     p.add_argument("--distill_steps", type=int, required=True,
                    help="Number of FINAL training steps that use distillation. "
                         "0 = pure SFT throughout.")
-    p.add_argument("--output_dir", default="experiments/distill_steps_end")
+    p.add_argument("--dataset", default="gsm8k",
+                   choices=["gsm8k", "commonsenseqa", "math"])
+    p.add_argument("--output_dir", default=None,
+                   help="Override output directory (default: auto from dataset)")
     return p.parse_args()
 
 
@@ -96,10 +108,11 @@ def main():
     assert 0 <= args.distill_steps <= TRAIN_STEPS, \
         f"--distill_steps must be in [0, {TRAIN_STEPS}]"
 
-    # Step at which distillation begins (inclusive)
+    dcfg = DATASET_CFG[args.dataset]
     distill_start = TRAIN_STEPS - args.distill_steps  # 200 when distill_steps=0
 
-    out_dir   = Path(args.output_dir) / f"steps_{args.distill_steps}"
+    base_out = Path(args.output_dir or DEFAULT_OUTPUT[args.dataset])
+    out_dir   = base_out / f"steps_{args.distill_steps}"
     final_dir = out_dir / "final"
     final_dir.mkdir(parents=True, exist_ok=True)
 
@@ -109,6 +122,7 @@ def main():
     if accelerator.is_main_process:
         print(f"\n{'='*60}")
         print(f" Distillation timing ablation  (distillation at END)")
+        print(f"   dataset       : {args.dataset}")
         print(f"   distill_steps : last {args.distill_steps} / {TRAIN_STEPS}")
         print(f"   distill_start : step {distill_start}")
         print(f"   Model         : {MODEL_NAME}")
@@ -147,19 +161,18 @@ def main():
         print()
 
     # ── Dataset ────────────────────────────────────────────────────────────────
-    train_data = load_gsm8k("train")
-    train_ds = GSM8KDistillDataset(
+    train_data   = load_dataset_split(args.dataset, "train")
+    train_loader = make_dataloader(
         train_data, tokenizer,
-        num_fewshot=NUM_FEWSHOT,
-        max_seq_len_teacher=MAX_SEQ_TEACHER,
-        max_seq_len_student=MAX_SEQ_STUDENT,
+        batch_size=BATCH_SIZE,
+        dataset_name=args.dataset,
+        num_fewshot=dcfg["num_fewshot"],
+        max_seq_len_teacher=dcfg["max_seq_teacher"],
+        max_seq_len_student=dcfg["max_seq_student"],
+        shuffle=True,
+        num_workers=4,
         seed=SEED,
         teacher_include_answer=(args.distill_steps > 0),
-    )
-    train_loader = DataLoader(
-        train_ds, batch_size=BATCH_SIZE, shuffle=True, num_workers=4,
-        collate_fn=lambda b: collate_fn(b, tokenizer.pad_token_id or tokenizer.eos_token_id),
-        pin_memory=True,
     )
 
     # ── Optimiser & scheduler ──────────────────────────────────────────────────
@@ -262,6 +275,7 @@ def main():
         accelerator.unwrap_model(model).save_pretrained(str(final_dir))
         tokenizer.save_pretrained(str(final_dir))
         meta = {
+            "dataset": args.dataset,
             "distill_steps": args.distill_steps,
             "distill_start_step": distill_start,
             "total_steps": TRAIN_STEPS,
