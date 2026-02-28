@@ -11,6 +11,12 @@ On cn14-dgx, sessions start via the `app` alias → apptainer container → `con
 
 Primary tmux sessions: `claude` (training/eval), `vscode` (parallel training), `vllm` (vLLM server), `tensor` (TensorBoard).
 
+Check GPU availability before launching jobs:
+```bash
+nvidia-smi --query-gpu=index,memory.used --format=csv,noheader
+```
+Other users may share the node; verify GPUs are free before allocating them.
+
 ## Common Commands
 
 ### Evaluate ICL gap (before training)
@@ -53,7 +59,19 @@ python scripts/gen_summary_fig.py      # cross-model bar chart → assets/summar
 python scripts/gen_main_fig.py         # Qwen3-1.7B checkpoint curve
 python scripts/gen_ablation_fig.py     # ablation curve + bar chart
 python scripts/gen_loss_fig.py         # CE loss comparison (reads TensorBoard logs)
+python scripts/write_results.py        # write results.md from JSON eval outputs
 ```
+
+### Evaluate checkpoints (HF fallback — for non-vLLM models like Param2-17B)
+```bash
+CUDA_VISIBLE_DEVICES=0,1,2,3 python scripts/eval_hf_checkpoints.py \
+    --config configs/param2_17b.yaml \
+    --conditions baseline online_v1 \
+    --base_dir experiments/param2_17b \
+    --n_samples 1319 --checkpoint_steps 200 400 600 800 1000 \
+    --output experiments/param2_17b_eval.json
+```
+Use `eval_hf_icl.py` (analogous to `eval_icl.py`) for the ICL baseline of non-vLLM models.
 
 ### Causal ablation training
 ```bash
@@ -110,6 +128,14 @@ This means `--output_dir experiments/qwen1b7/baseline` → scripts write to `exp
 
 Full-FT vs LoRA auto-detection: presence of `adapter_config.json` in the checkpoint directory.
 
+### Model specs
+| Model | Layers | Hidden size | Note |
+|---|---|---|---|
+| Qwen3-1.7B | 28 | 2048 | hidden_size is 2048, not 1536 |
+| Qwen3-8B | 36 | 4096 | |
+| Llama-3.2-3B | — | — | |
+| Gemma-3-270M | — | — | full FT (no LoRA) |
+
 ### Experiment naming
 | Model | Base config | Online config | Experiment dir |
 |---|---|---|---|
@@ -126,7 +152,7 @@ Full-FT vs LoRA auto-detection: presence of `adapter_config.json` in the checkpo
 
 **Qwen3 thinking mode**: always pass `enable_thinking=False` to `apply_chat_template` (or `extra_body={"chat_template_kwargs": {"enable_thinking": False}}` in vLLM API). Thinking tokens break `#### <number>` answer extraction.
 
-**vLLM context**: vLLM binds to the container's localhost. Always call `evaluate.py` and any vLLM API client from **inside** the apptainer session (not from a plain SSH shell).
+**vLLM context**: vLLM binds to the container's localhost. Always call `evaluate.py` and any vLLM API client from **inside** the apptainer session (not from a plain SSH shell). The first LoRA request compiles CUDA kernels — wait ≥60 s before concluding a hang; subsequent requests are fast.
 
 **Parallel training ports**: use `--main_process_port 29500` on GPUs 0,1 and `--main_process_port 29501` on GPUs 2,3 to avoid collision when running two accelerate jobs simultaneously.
 
@@ -139,3 +165,7 @@ The paper lives in `paper/` (gitignored).
 ### Compile PDF (must be inside the apptainer container)
 
 `pdflatex` is only available inside the apptainer container (`app` alias). LaTeX packages are installed in `~/images/mine.def` (texlive-latex-base, texlive-latex-extra, texlive-fonts-extra, texlive-bibtex-extra, texlive-science, cm-super, etc.).
+
+```bash
+cd paper && pdflatex main.tex && bibtex main && pdflatex main.tex && pdflatex main.tex
+```

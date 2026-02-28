@@ -44,7 +44,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, get_cosine_schedul
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from accelerate import Accelerator
-from src.data.gsm8k_loader import load_gsm8k, make_dataloader
+from src.data.loader_factory import load_dataset_split, make_dataloader
 from src.models.student import StudentModel
 
 
@@ -120,7 +120,8 @@ def main():
 
     shuffle_answers = getattr(cfg.data, "shuffle_fewshot_answers", False)
 
-    train_data = load_gsm8k(cfg.data.train_split)
+    dataset_name = getattr(cfg.data, "dataset", "gsm8k")
+    train_data = load_dataset_split(dataset_name, cfg.data.train_split)
     train_loader = make_dataloader(
         train_data, tokenizer,
         batch_size=cfg.training.per_device_train_batch_size,
@@ -132,6 +133,7 @@ def main():
         seed=cfg.training.seed,
         teacher_include_answer=True,
         shuffle_fewshot_answers=shuffle_answers,
+        dataset_name=dataset_name,
     )
 
     use_lora = getattr(cfg.training, "use_lora", True)

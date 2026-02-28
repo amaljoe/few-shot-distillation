@@ -1,0 +1,48 @@
+# MATH (Hendrycks) + Qwen3-1.7B configuration
+# 4-shot (8 would overflow teacher context with long solutions)
+# Long student sequences need gradient checkpointing and small batch
+
+model:
+  name: "Qwen/Qwen3-1.7B"
+  num_layers: 28
+  hidden_size: 2048
+  thinking_mode: false
+
+data:
+  dataset: "math"
+  train_split: "train"
+  test_split: "test"
+  num_fewshot_examples: 4
+  max_seq_len_teacher: 6144
+  max_seq_len_student: 1024
+  num_workers: 4
+
+training:
+  seed: 42
+  output_dir: "experiments/math_qwen1b7"
+  logging_steps: 10
+  eval_steps: 100
+  save_steps: 200
+  max_steps: 1000
+  warmup_steps: 50
+  lr: 2.0e-4
+  weight_decay: 0.01
+  grad_clip: 1.0
+  per_device_train_batch_size: 1
+  gradient_accumulation_steps: 16  # effective batch = 32 across 2 GPUs
+  bf16: true
+  gradient_checkpointing: true
+
+lora:
+  r: 16
+  alpha: 32
+  dropout: 0.05
+  target_modules:
+    - q_proj
+    - k_proj
+    - v_proj
+    - o_proj
+    - gate_proj
+    - up_proj
+    - down_proj
+  bias: "none"

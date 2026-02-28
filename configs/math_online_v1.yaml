@@ -1,0 +1,11 @@
+# Online top-K logit distillation — MATH override config
+# Merged on top of math_qwen1b7.yaml by train_online_v1.py
+
+distillation:
+  n_top_logits: 256
+  lambda_distill: 0.5
+  normalize_logits: false
+
+training:
+  output_dir: "experiments/math_qwen1b7"
+  save_steps: 200

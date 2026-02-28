@@ -38,6 +38,9 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", type=str, default="configs/qwen1b7.yaml")
+    parser.add_argument("--dataset", type=str, default="gsm8k",
+                        choices=["gsm8k", "commonsenseqa", "math"],
+                        help="Dataset to evaluate on")
     parser.add_argument("--n_samples", type=int, default=400,
                         help="Number of test examples to evaluate per checkpoint")
     parser.add_argument("--conditions", nargs="+",
@@ -97,12 +100,15 @@ def evaluate_checkpoint(
     prompts: list[str],
     ground_truths: list[str],
     desc: str,
+    extract_fn=None,
 ) -> dict:
+    if extract_fn is None:
+        extract_fn = extract_answer
     outputs = llm.generate(prompts, sampling_params, lora_request=lora_request)
     correct = 0
     for out, gt in zip(outputs, ground_truths):
         generated = out.outputs[0].text
-        pred = extract_answer(generated)
+        pred = extract_fn(generated)
         if pred is not None and pred == gt:
             correct += 1
     accuracy = correct / len(prompts)
@@ -136,14 +142,78 @@ def main():
         tokenizer.pad_token = tokenizer.eos_token
 
     # Fixed test subset (same seed for reproducibility)
-    dataset = load_dataset("gsm8k", "main")
-    test_data = list(dataset["test"])
+    if args.dataset == "gsm8k":
+        dataset = load_dataset("gsm8k", "main")
+        test_data = list(dataset["test"])
+        _extract_answer = extract_answer
+        _get_ground_truth = lambda ex: get_ground_truth(ex["answer"])
+        _build_prompts = build_prompts
+    elif args.dataset == "commonsenseqa":
+        from src.data.commonsenseqa_loader import (
+            load_commonsenseqa,
+            extract_answer as csqa_extract,
+            get_ground_truth as csqa_gt,
+            build_student_messages as csqa_student_msgs,
+        )
+        test_data = list(load_commonsenseqa("validation"))
+        _extract_answer = csqa_extract
+        _get_ground_truth = csqa_gt
+
+        def _build_prompts(examples, tok):
+            prompts = []
+            for ex in examples:
+                messages = csqa_student_msgs(ex)
+                if getattr(tok, "chat_template", None) is None:
+                    text = messages[0]["content"] + "\n"
+                else:
+                    try:
+                        text = tok.apply_chat_template(
+                            messages, tokenize=False, add_generation_prompt=True,
+                            enable_thinking=False,
+                        )
+                    except TypeError:
+                        text = tok.apply_chat_template(
+                            messages, tokenize=False, add_generation_prompt=True,
+                        )
+                prompts.append(text)
+            return prompts
+
+    elif args.dataset == "math":
+        from src.data.math_loader import (
+            load_math,
+            extract_answer as math_extract,
+            get_ground_truth as math_gt,
+            build_student_messages as math_student_msgs,
+        )
+        test_data = list(load_math("test"))
+        _extract_answer = math_extract
+        _get_ground_truth = math_gt
+
+        def _build_prompts(examples, tok):
+            prompts = []
+            for ex in examples:
+                messages = math_student_msgs(ex)
+                if getattr(tok, "chat_template", None) is None:
+                    text = messages[0]["content"] + "\n"
+                else:
+                    try:
+                        text = tok.apply_chat_template(
+                            messages, tokenize=False, add_generation_prompt=True,
+                            enable_thinking=False,
+                        )
+                    except TypeError:
+                        text = tok.apply_chat_template(
+                            messages, tokenize=False, add_generation_prompt=True,
+                        )
+                prompts.append(text)
+            return prompts
+
     torch.manual_seed(42)
     indices = torch.randperm(len(test_data))[:args.n_samples].tolist()
     test_subset = [test_data[i] for i in indices]
 
-    prompts = build_prompts(test_subset, tokenizer)
-    ground_truths = [get_ground_truth(ex["answer"]) for ex in test_subset]
+    prompts = _build_prompts(test_subset, tokenizer)
+    ground_truths = [_get_ground_truth(ex) for ex in test_subset]
 
     print(f"\nCheckpoint curve evaluation")
     print(f"  Test subset: {len(prompts)} examples")
@@ -208,7 +278,7 @@ def main():
 
                 result = evaluate_checkpoint(
                     llm, sampling_params, lora_req, prompts, ground_truths,
-                    desc=f"step {step}",
+                    desc=f"step {step}", extract_fn=_extract_answer,
                 )
                 results["conditions"][cond][f"step_{step}"] = result
 
@@ -238,7 +308,7 @@ def main():
 
             result = evaluate_checkpoint(
                 llm, sampling_params, None, prompts, ground_truths,
-                desc=f"step {step}",
+                desc=f"step {step}", extract_fn=_extract_answer,
             )
             results["conditions"][cond][f"step_{step}"] = result
 
