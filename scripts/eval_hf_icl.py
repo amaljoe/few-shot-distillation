@@ -32,7 +32,11 @@ def parse_args():
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--output", type=str, required=True)
     parser.add_argument("--max_new_tokens", type=int, default=1024)
-    parser.add_argument("--batch_size", type=int, default=4)
+    parser.add_argument("--batch_size", type=int, default=4,
+                        help="Default batch size (used for all shots unless --batch_sizes provided)")
+    parser.add_argument("--batch_sizes", type=int, nargs="+", default=None,
+                        help="Per-shot batch sizes matching --num_fewshot order. "
+                             "E.g. --num_fewshot 0 8 --batch_sizes 128 48")
     return parser.parse_args()
 
 
@@ -120,8 +124,17 @@ def main():
         "evaluations": {},
     }
 
+    # Build per-shot batch size map
+    if args.batch_sizes is not None:
+        assert len(args.batch_sizes) == len(args.num_fewshot), \
+            "--batch_sizes must have same length as --num_fewshot"
+        shot_batch_sizes = dict(zip(args.num_fewshot, args.batch_sizes))
+    else:
+        shot_batch_sizes = {n: args.batch_size for n in args.num_fewshot}
+
     for nshot in args.num_fewshot:
-        print(f"\n--- Evaluating {nshot}-shot ---")
+        bsz = shot_batch_sizes[nshot]
+        print(f"\n--- Evaluating {nshot}-shot (batch_size={bsz}) ---")
         prompts = []
         ground_truths = []
 
@@ -136,9 +149,9 @@ def main():
         correct = 0
         details = []
 
-        for i in tqdm(range(0, len(prompts), args.batch_size), desc=f"{nshot}-shot"):
-            batch_prompts = prompts[i:i + args.batch_size]
-            batch_gts = ground_truths[i:i + args.batch_size]
+        for i in tqdm(range(0, len(prompts), bsz), desc=f"{nshot}-shot"):
+            batch_prompts = prompts[i:i + bsz]
+            batch_gts = ground_truths[i:i + bsz]
 
             inputs = tokenizer(
                 batch_prompts,
@@ -180,6 +193,9 @@ def main():
             "details": details,
         }
         print(f"  {nshot}-shot accuracy: {accuracy:.2%} ({correct}/{len(test_sample)})")
+        # Save incrementally so a later OOM doesn't lose completed shots
+        with open(args.output, "w") as f:
+            json.dump(results, f, indent=2)
 
     shot_accs = {k: v["accuracy"] for k, v in results["evaluations"].items()}
     if "0_shot" in shot_accs:
