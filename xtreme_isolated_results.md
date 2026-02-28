@@ -13,11 +13,15 @@
 | NER | 50.4% | 0.0 | 50.4% | +0.0pp | F1 |
 | POS | 18.0% | 0.1 | 23.6% | +5.7pp | ACCURACY |
 
+## Combined Overview
+
+![lambda sweep combined](assets/xtreme/lambda_sweep_combined.png)
+
 ## Per-Task Lambda Sensitivity
 
 ### NLI (XNLI-en)
 
-![nli lambda sweep](figures/nli_lambda_sweep.png)
+![nli lambda sweep](assets/xtreme/nli_lambda_sweep.png)
 
 | λ | Score |
 |---|---|
@@ -32,7 +36,7 @@
 
 ### Paraphrase (PAWS-X en)
 
-![pa lambda sweep](figures/pa_lambda_sweep.png)
+![pa lambda sweep](assets/xtreme/pa_lambda_sweep.png)
 
 | λ | Score |
 |---|---|
@@ -47,7 +51,7 @@
 
 ### QA (MLQA en)
 
-![qa lambda sweep](figures/qa_lambda_sweep.png)
+![qa lambda sweep](assets/xtreme/qa_lambda_sweep.png)
 
 | λ | Score |
 |---|---|
@@ -62,7 +66,7 @@
 
 ### NER (WikiANN en)
 
-![ner lambda sweep](figures/ner_lambda_sweep.png)
+![ner lambda sweep](assets/xtreme/ner_lambda_sweep.png)
 
 | λ | Score |
 |---|---|
@@ -77,7 +81,7 @@
 
 ### POS (UDPOS en)
 
-![pos lambda sweep](figures/pos_lambda_sweep.png)
+![pos lambda sweep](assets/xtreme/pos_lambda_sweep.png)
 
 | λ | Score |
 |---|---|
