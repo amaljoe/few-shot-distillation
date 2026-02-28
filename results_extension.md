@@ -10,9 +10,11 @@ Model: Qwen/Qwen3-1.7B (auto-escalate to Qwen3-8B if ICL gap < 5pp)
 
 | Shots | Accuracy |
 |-------|----------|
-| 0-shot | TBD |
-| 5-shot | TBD |
-| **ICL Gap** | **TBD** |
+| 0-shot | 43.00% (215/500) |
+| 4-shot | 55.00% (275/500) |
+| **ICL Gap** | **+12.00%** |
+
+> ICL gap ≥ 5pp → using Qwen3-1.7B (no escalation). Training config uses 5-shot; eval ran 4-shot (closest available).
 
 Eval command:
 ```bash
@@ -25,9 +27,11 @@ CUDA_VISIBLE_DEVICES=0,1 python scripts/eval_icl.py \
 
 | Shots | Accuracy |
 |-------|----------|
-| 0-shot | TBD |
-| 4-shot | TBD |
-| **ICL Gap** | **TBD** |
+| 0-shot | 1.50% (3/200) |
+| 4-shot | 11.00% (22/200) |
+| **ICL Gap** | **+9.50%** |
+
+> ICL gap ≥ 5pp → using Qwen3-1.7B (no escalation).
 
 Eval command:
 ```bash
@@ -85,17 +89,17 @@ CUDA_VISIBLE_DEVICES=0,1,2,3 python scripts/eval_checkpoints.py \
   --output experiments/csqa_qwen1b7/results.json --tensor_parallel_size 4
 ```
 
-Results (fill in as checkpoints complete):
+Results (n=1221, full validation set):
 
 | Step | baseline | online_v1 |
 |------|----------|-----------|
-| 0 (ICL 0-shot) | TBD | — |
-| 0 (ICL 5-shot) | — | TBD |
-| 200 | TBD | TBD |
-| 400 | TBD | TBD |
-| 600 | TBD | TBD |
-| 800 | TBD | TBD |
-| 1000 | TBD | TBD |
+| 0 (ICL 0-shot) | 43.00% | — |
+| 0 (ICL 4-shot) | — | 55.00% |
+| 200 | 77.97% | 72.89% |
+| 400 | 79.52% | 75.10% |
+| 600 | 79.28% | 75.51% |
+| 800 | 77.48% | 73.55% |
+| 1000 | 73.38% | 74.04% |
 
 ### MATH
 
@@ -108,17 +112,17 @@ CUDA_VISIBLE_DEVICES=0,1,2,3 python scripts/eval_checkpoints.py \
   --max_new_tokens 1024 --max_model_len 4096
 ```
 
-Results (fill in as checkpoints complete):
+Results (n=500):
 
 | Step | baseline | online_v1 |
 |------|----------|-----------|
-| 0 (ICL 0-shot) | TBD | — |
-| 0 (ICL 4-shot) | — | TBD |
-| 200 | TBD | TBD |
-| 400 | TBD | TBD |
-| 600 | TBD | TBD |
-| 800 | TBD | TBD |
-| 1000 | TBD | TBD |
+| 0 (ICL 0-shot) | 1.50% | — |
+| 0 (ICL 4-shot) | — | 11.00% |
+| 200 | 32.40% | 43.80% |
+| 400 | 29.80% | 43.60% |
+| 600 | 31.60% | 44.00% |
+| 800 | 31.20% | 41.00% |
+| 1000 | 28.60% | 41.60% |
 
 ---
 
@@ -126,6 +130,6 @@ Results (fill in as checkpoints complete):
 
 | Dataset | ICL Gap | SFT (step 1000) | Distill (step 1000) | Distill gain |
 |---------|---------|-----------------|----------------------|--------------|
-| GSM8K | +X% | X% | X% | +X% |
-| CommonsenseQA | TBD | TBD | TBD | TBD |
-| MATH | TBD | TBD | TBD | TBD |
+| GSM8K | +21.00% | 63.00% | 71.04% | +8.04% |
+| CommonsenseQA | +12.00% | 73.38% | 74.04% | +0.66% |
+| MATH | +9.50% | 28.60% | 41.60% | **+13.00%** |
