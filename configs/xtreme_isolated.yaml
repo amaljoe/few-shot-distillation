@@ -1,0 +1,14 @@
+# Config for XTREME isolated single-task English-only lambda sweep
+# Use as --config (alongside --base_config configs/xtreme_qwen1b7.yaml)
+# Lambda is overridden per experiment via --lambda_distill CLI arg
+
+distillation:
+  n_top_logits: 256
+  lambda_distill: 0.5   # overridden by --lambda_distill each run
+
+data:
+  eval_langs: [en]      # English training only
+
+training:
+  max_steps: 200
+  warmup_steps: 20

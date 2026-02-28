@@ -219,9 +219,9 @@ def main():
                 )
 
             student_out = model(
-                input_ids=batch.student_input_ids,
-                attention_mask=batch.student_attention_mask,
-                labels=batch.labels,
+                input_ids=batch.student_input_ids.to(device),
+                attention_mask=batch.student_attention_mask.to(device),
+                labels=labels_d,
             )
             ce_loss = student_out.loss
 
