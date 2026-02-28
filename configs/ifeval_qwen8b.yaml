@@ -1,0 +1,44 @@
+# IFEval configuration for Qwen3-8B
+# Architecture: 36 layers, hidden_size=4096
+#
+# Rationale: Qwen3-1.7B ICL gap on IFEval is only +1.29% (too small).
+# Qwen3-8B is needed for meaningful instruction-following capability.
+
+model:
+  name: "Qwen/Qwen3-8B"
+  num_layers: 36
+  hidden_size: 4096
+  thinking_mode: false
+
+data:
+  dataset: "ifeval"
+  train_split: "train"          # argilla/ifeval-like-data (filtered, compliant subset)
+  test_split: "test"            # google/IFEval (eval scripts load this directly)
+  num_fewshot_examples: 4
+  max_seq_len_teacher: 2048     # 4 argilla shots + instruction + response
+  max_seq_len_student: 512      # instruction + response only
+  num_workers: 4
+
+training:
+  seed: 42
+  output_dir: "experiments/ifeval_qwen8b"
+  logging_steps: 10
+  eval_steps: 100
+  save_steps: 200
+  max_steps: 1000               # ~14-15 min on 2xA100
+  warmup_steps: 50
+  lr: 2.0e-4
+  weight_decay: 0.01
+  grad_clip: 1.0
+  per_device_train_batch_size: 2    # reduced for 8B model
+  gradient_accumulation_steps: 8   # effective batch = 32 on 2 GPUs (2x8x2)
+  bf16: true
+  gradient_checkpointing: true      # needed for 8B to reduce activation memory
+  use_lora: true
+
+lora:
+  r: 16
+  alpha: 32
+  dropout: 0.05
+  target_modules: [q_proj, k_proj, v_proj, o_proj, gate_proj, up_proj, down_proj]
+  bias: "none"

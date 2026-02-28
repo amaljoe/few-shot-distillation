@@ -1,0 +1,11 @@
+# Online logit distillation overrides for IFEval Qwen3-8B
+# Inherits from ifeval_qwen8b.yaml
+
+distillation:
+  n_top_logits: 256
+  lambda_distill: 0.5
+  normalize_logits: false
+
+training:
+  output_dir: "experiments/ifeval_qwen8b"
+  save_steps: 200

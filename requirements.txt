@@ -8,3 +8,8 @@ vllm>=0.4.0
 tensorboard>=2.15.0
 openai>=1.0.0
 tqdm>=4.66.0
+# IFEval constraint checking (instruction_following_eval vendored at project root)
+langdetect>=1.0.9
+nltk>=3.8
+immutabledict>=4.0
+absl-py>=1.0

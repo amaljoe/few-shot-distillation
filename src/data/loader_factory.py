@@ -1,7 +1,7 @@
 """
 Central dataset dispatcher for ICL distillation experiments.
 
-Supports: gsm8k, commonsenseqa, math
+Supports: gsm8k, commonsenseqa, math, ifeval
 """
 
 from src.data.gsm8k_loader import (
@@ -16,6 +16,10 @@ from src.data.math_loader import (
     load_math,
     make_dataloader as _math_dl,
 )
+from src.data.ifeval_loader import (
+    load_ifeval,
+    make_dataloader as _ifeval_dl,
+)
 
 
 def load_dataset_split(name: str, split: str):
@@ -26,8 +30,10 @@ def load_dataset_split(name: str, split: str):
         return load_commonsenseqa(split)
     elif name == "math":
         return load_math(split)
+    elif name == "ifeval":
+        return load_ifeval(split)
     else:
-        raise ValueError(f"Unknown dataset: {name!r}. Choose from: gsm8k, commonsenseqa, math")
+        raise ValueError(f"Unknown dataset: {name!r}. Choose from: gsm8k, commonsenseqa, math, ifeval")
 
 
 def make_dataloader(dataset, tokenizer, batch_size, dataset_name="gsm8k", **kwargs):
@@ -44,5 +50,7 @@ def make_dataloader(dataset, tokenizer, batch_size, dataset_name="gsm8k", **kwar
         return _csqa_dl(dataset, tokenizer, batch_size, **kwargs)
     elif dataset_name == "math":
         return _math_dl(dataset, tokenizer, batch_size, **kwargs)
+    elif dataset_name == "ifeval":
+        return _ifeval_dl(dataset, tokenizer, batch_size, **kwargs)
     else:
-        raise ValueError(f"Unknown dataset: {dataset_name!r}. Choose from: gsm8k, commonsenseqa, math")
+        raise ValueError(f"Unknown dataset: {dataset_name!r}. Choose from: gsm8k, commonsenseqa, math, ifeval")

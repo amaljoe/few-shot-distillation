@@ -1,0 +1,8 @@
+distillation:
+  n_top_logits: 256
+  lambda_distill: 0.5
+  normalize_logits: false
+
+training:
+  output_dir: "experiments/ifeval_qwen1b7"
+  save_steps: 200
