@@ -1,23 +1,28 @@
 """
 Loss curve experiment: track zero-shot vs few-shot dev loss during SFT/distillation.
 
-Trains Qwen3-1.7B (LoRA) on GSM8K for 200 steps.
+Trains Qwen3-1.7B (LoRA) on a chosen dataset for 200 steps.
 Every 16 steps evaluates CE loss on 32 dev examples in two formats:
   - zs: zero-shot  — question → answer              (loss on answer tokens only)
-  - fs: few-shot   — 8-shot context + question → answer (loss on answer tokens only)
+  - fs: few-shot   — k-shot context + question → answer (loss on answer tokens only)
 
 Mode:
   baseline  CE loss only (standard SFT)
   distill   CE + λ·MSE on top-K teacher logits (our method)
 
+Dataset:
+  gsm8k          8-shot, math reasoning
+  math           4-shot, MATH-lighteval
+  commonsenseqa  5-shot, multiple-choice
+
 Usage (run from project root inside the apptainer container):
   CUDA_VISIBLE_DEVICES=0,1,2,3 accelerate launch \\
       --num_processes 4 --mixed_precision bf16 --main_process_port 29500 \\
-      scripts/loss_curve_experiment.py --mode baseline
+      scripts/loss_curve_experiment.py --mode baseline --dataset gsm8k
 
   CUDA_VISIBLE_DEVICES=0,1,2,3 accelerate launch \\
       --num_processes 4 --mixed_precision bf16 --main_process_port 29500 \\
-      scripts/loss_curve_experiment.py --mode distill
+      scripts/loss_curve_experiment.py --mode distill --dataset math
 """
 
 import argparse
@@ -30,7 +35,6 @@ import torch
 import torch.nn.functional as F
 from peft import LoraConfig, TaskType, get_peft_model
 from torch.optim import AdamW
-from torch.utils.data import DataLoader
 from tqdm import tqdm
 from transformers import AutoModelForCausalLM, AutoTokenizer, get_cosine_schedule_with_warmup
 
@@ -38,18 +42,16 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from accelerate import Accelerator
 from src.data.gsm8k_loader import (
-    GSM8KDistillDataset,
     apply_chat_template_no_think,
-    build_fewshot_messages,
     collate_fn,
-    load_gsm8k,
 )
+import src.data.gsm8k_loader as _gsm8k
+import src.data.math_loader as _math
+import src.data.commonsenseqa_loader as _csqa
+from src.data.loader_factory import load_dataset_split, make_dataloader as _factory_dl
 
 # ── Hyperparameters ───────────────────────────────────────────────────────────
 MODEL_NAME      = "Qwen/Qwen3-1.7B"
-NUM_FEWSHOT     = 8
-MAX_SEQ_STUDENT = 512
-MAX_SEQ_TEACHER = 4096
 DEV_SIZE        = 32
 DEV_BATCH       = 4         # mini-batch size for dev evaluation
 TRAIN_STEPS     = 200
@@ -62,6 +64,36 @@ GRAD_CLIP       = 1.0
 SEED            = 42
 K_VOCAB         = 256       # distillation: top-K vocab indices from teacher
 LAM_DISTILL     = 0.5       # distillation: loss weight λ
+
+# ── Per-dataset config ────────────────────────────────────────────────────────
+# Each entry provides the callables and seq-len defaults needed for dev batch
+# construction and training, so the rest of the script stays dataset-agnostic.
+DATASET_CONFIGS = {
+    "gsm8k": {
+        "num_fewshot":            8,
+        "max_seq_student":        512,
+        "max_seq_teacher":        4096,
+        "build_fewshot_messages": _gsm8k.build_fewshot_messages,
+        "build_student_messages": _gsm8k.build_student_messages,
+        "get_answer":             lambda ex: ex["answer"],
+    },
+    "math": {
+        "num_fewshot":            4,
+        "max_seq_student":        1024,
+        "max_seq_teacher":        6144,
+        "build_fewshot_messages": _math.build_fewshot_messages,
+        "build_student_messages": _math.build_student_messages,
+        "get_answer":             lambda ex: ex["solution"],
+    },
+    "commonsenseqa": {
+        "num_fewshot":            5,
+        "max_seq_student":        256,
+        "max_seq_teacher":        1024,
+        "build_fewshot_messages": _csqa.build_fewshot_messages,
+        "build_student_messages": _csqa.build_student_messages,
+        "get_answer":             _csqa.get_answer_text,
+    },
+}
 
 LORA_KWARGS = dict(
     r=16,
@@ -95,14 +127,14 @@ def _template_with_answer(tokenizer, messages_ending_with_assistant):
 
 # ── Dev set builder ───────────────────────────────────────────────────────────
 
-def build_dev_batches(tokenizer):
+def build_dev_batches(tokenizer, dataset_name):
     """
-    Build fixed zero-shot and few-shot dev batches from 32 GSM8K test examples.
+    Build fixed zero-shot and few-shot dev batches from DEV_SIZE test examples.
 
     For each example:
       zs: full_ids = [question tokens][answer tokens]
           labels   = [-100 × prompt_len] + [answer tokens]
-      fs: full_ids = [8-shot context tokens][question tokens][answer tokens]
+      fs: full_ids = [k-shot context tokens][question tokens][answer tokens]
           labels   = [-100 × (total - n_ans)] + [last n_ans tokens]
 
     where n_ans = len(zs_full_ids) - prompt_len  (same answer token count in both formats).
@@ -110,9 +142,14 @@ def build_dev_batches(tokenizer):
     Returns:
         zs_batches, fs_batches: lists of {input_ids, attention_mask, labels} dicts (tensors)
     """
-    test_data  = load_gsm8k("test")
-    train_data = load_gsm8k("train")
-    pad_id = tokenizer.pad_token_id or tokenizer.eos_token_id
+    cfg        = DATASET_CONFIGS[dataset_name]
+    test_data  = load_dataset_split(dataset_name, "test")
+    train_data = load_dataset_split(dataset_name, "train")
+    pad_id     = tokenizer.pad_token_id or tokenizer.eos_token_id
+
+    max_seq_student = cfg["max_seq_student"]
+    max_seq_teacher = cfg["max_seq_teacher"]
+    num_fewshot     = cfg["num_fewshot"]
 
     rng = random.Random(SEED)
     indices = rng.sample(range(len(test_data)), DEV_SIZE)
@@ -121,45 +158,40 @@ def build_dev_batches(tokenizer):
 
     for idx in indices:
         example = test_data[idx]
+        answer  = cfg["get_answer"](example)
 
         # Sample few-shot examples from training set (deterministic per example)
         shot_rng = random.Random(SEED * 10000 + idx)
-        shots = [train_data[i] for i in shot_rng.sample(range(len(train_data)), NUM_FEWSHOT)]
+        shots = [train_data[i] for i in shot_rng.sample(range(len(train_data)), num_fewshot)]
 
         # ── Zero-shot ──────────────────────────────────────────────────────
-        zs_prompt_str = apply_chat_template_no_think(
-            tokenizer, [{"role": "user", "content": f"Question: {example['question']}"}]
-        )
+        zs_msgs       = cfg["build_student_messages"](example)
+        zs_prompt_str = apply_chat_template_no_think(tokenizer, zs_msgs)
         zs_prompt_ids = tokenizer(zs_prompt_str, add_special_tokens=False)["input_ids"]
-        prompt_len = len(zs_prompt_ids)
+        prompt_len    = len(zs_prompt_ids)
 
-        zs_full_msgs = [
-            {"role": "user",      "content": f"Question: {example['question']}"},
-            {"role": "assistant", "content": example["answer"]},
-        ]
-        zs_full_str = _template_with_answer(tokenizer, zs_full_msgs)
+        zs_full_msgs = zs_msgs + [{"role": "assistant", "content": answer}]
+        zs_full_str  = _template_with_answer(tokenizer, zs_full_msgs)
         zs_enc = tokenizer(
             zs_full_str, add_special_tokens=False,
-            max_length=MAX_SEQ_STUDENT, truncation=True,
+            max_length=max_seq_student, truncation=True,
         )
         zs_ids = zs_enc["input_ids"]
-        # n_ans: tokens added by the answer (assistant prefix + CoT + suffix)
-        n_ans = len(zs_ids) - prompt_len
+        n_ans  = len(zs_ids) - prompt_len
         zs_labels = [-100] * prompt_len + zs_ids[prompt_len:]
 
         zs_items.append({"ids": zs_ids, "mask": zs_enc["attention_mask"], "labels": zs_labels})
 
         # ── Few-shot ───────────────────────────────────────────────────────
-        fs_msgs = build_fewshot_messages(shots, example) + [
-            {"role": "assistant", "content": example["answer"]}
+        fs_msgs = cfg["build_fewshot_messages"](shots, example) + [
+            {"role": "assistant", "content": answer}
         ]
         fs_str = _template_with_answer(tokenizer, fs_msgs)
         fs_enc = tokenizer(
             fs_str, add_special_tokens=False,
-            max_length=MAX_SEQ_TEACHER, truncation=True,
+            max_length=max_seq_teacher, truncation=True,
         )
-        fs_ids = fs_enc["input_ids"]
-        # Labels: only the last n_ans tokens (the target answer, aligned by suffix)
+        fs_ids  = fs_enc["input_ids"]
         n_valid = min(n_ans, len(fs_ids))
         fs_labels = [-100] * (len(fs_ids) - n_valid) + fs_ids[-n_valid:]
 
@@ -238,14 +270,16 @@ def answer_alignment(t_lens, labels, device):
 
 def parse_args():
     p = argparse.ArgumentParser()
-    p.add_argument("--mode", choices=["baseline", "distill"], required=True)
+    p.add_argument("--mode",    choices=["baseline", "distill"], required=True)
+    p.add_argument("--dataset", choices=list(DATASET_CONFIGS), default="gsm8k")
     p.add_argument("--output_dir", default="experiments/loss_curve")
     return p.parse_args()
 
 
 def main():
     args = parse_args()
-    out_dir = Path(args.output_dir) / args.mode
+    cfg = DATASET_CONFIGS[args.dataset]
+    out_dir = Path(args.output_dir) / args.dataset / args.mode
     out_dir.mkdir(parents=True, exist_ok=True)
 
     accelerator = Accelerator(mixed_precision="bf16")
@@ -254,10 +288,11 @@ def main():
     if accelerator.is_main_process:
         print(f"\n{'='*60}")
         print(f"Loss curve experiment — mode: {args.mode}")
-        print(f"Model : {MODEL_NAME}")
-        print(f"Steps : {TRAIN_STEPS}  |  eval every {EVAL_STEPS}")
-        print(f"Dev   : {DEV_SIZE} GSM8K test examples")
-        print(f"Output: {out_dir}")
+        print(f"Model  : {MODEL_NAME}")
+        print(f"Dataset: {args.dataset}  ({cfg['num_fewshot']}-shot)")
+        print(f"Steps  : {TRAIN_STEPS}  |  eval every {EVAL_STEPS}")
+        print(f"Dev    : {DEV_SIZE} test examples")
+        print(f"Output : {out_dir}")
         print(f"{'='*60}\n")
 
     # ── Tokenizer ─────────────────────────────────────────────────────────────
@@ -268,7 +303,7 @@ def main():
     # ── Dev batches (built on every process, identical, only main process uses them) ──
     if accelerator.is_main_process:
         print("Building dev batches …")
-    zs_dev, fs_dev = build_dev_batches(tokenizer)
+    zs_dev, fs_dev = build_dev_batches(tokenizer, args.dataset)
     if accelerator.is_main_process:
         print(f"  zs batches: {len(zs_dev)}, fs batches: {len(fs_dev)}\n")
 
@@ -299,19 +334,17 @@ def main():
         print()
 
     # ── Dataset / DataLoader ──────────────────────────────────────────────────
-    train_data = load_gsm8k("train")
-    train_ds = GSM8KDistillDataset(
-        train_data, tokenizer,
-        num_fewshot=NUM_FEWSHOT,
-        max_seq_len_teacher=MAX_SEQ_TEACHER,
-        max_seq_len_student=MAX_SEQ_STUDENT,
+    train_data   = load_dataset_split(args.dataset, "train")
+    train_loader = _factory_dl(
+        train_data, tokenizer, BATCH_SIZE,
+        dataset_name=args.dataset,
+        num_fewshot=cfg["num_fewshot"],
+        max_seq_len_teacher=cfg["max_seq_teacher"],
+        max_seq_len_student=cfg["max_seq_student"],
+        shuffle=True,
+        num_workers=4,
         seed=SEED,
         teacher_include_answer=(args.mode == "distill"),
-    )
-    train_loader = DataLoader(
-        train_ds, batch_size=BATCH_SIZE, shuffle=True, num_workers=4,
-        collate_fn=lambda b: collate_fn(b, tokenizer.pad_token_id or tokenizer.eos_token_id),
-        pin_memory=True,
     )
 
     # ── Optimizer & scheduler ─────────────────────────────────────────────────
@@ -330,7 +363,7 @@ def main():
     train_iter = iter(train_loader)
     step = 0
 
-    results = {"mode": args.mode, "steps": [], "zs_loss": [], "fs_loss": []}
+    results = {"mode": args.mode, "dataset": args.dataset, "steps": [], "zs_loss": [], "fs_loss": []}
 
     progress = tqdm(total=TRAIN_STEPS, desc=f"[{args.mode}]",
                     disable=not accelerator.is_main_process)

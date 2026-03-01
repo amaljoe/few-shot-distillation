@@ -1,13 +1,18 @@
 """
 Plot zero-shot vs few-shot dev loss curves for baseline and distill experiments.
 
-Reads:  experiments/loss_curve/{baseline,distill}/results.json
-Writes: experiments/loss_curve/loss_curves_baseline.png
-        experiments/loss_curve/loss_curves_distill.png
+Reads:  experiments/loss_curve/{dataset}/{baseline,distill}/results.json
+Writes: experiments/loss_curve/{dataset}/loss_curves_{mode}.png
 
 Can run locally (no GPU needed).
+
+Usage:
+  python scripts/plot_loss_curves.py                        # gsm8k (original behaviour)
+  python scripts/plot_loss_curves.py --dataset math
+  python scripts/plot_loss_curves.py --dataset commonsenseqa
 """
 
+import argparse
 import json
 from pathlib import Path
 
@@ -71,25 +76,40 @@ def plot_condition(results: dict, out_path: Path, title: str):
     print(f"✓  Saved {out_path}")
 
 
+def parse_args():
+    p = argparse.ArgumentParser()
+    p.add_argument("--dataset", default="gsm8k",
+                   choices=["gsm8k", "math", "commonsenseqa"],
+                   help="Dataset to plot (default: gsm8k)")
+    return p.parse_args()
+
+
 def main():
+    args = parse_args()
+    dataset_dir = BASE_DIR / args.dataset
     any_found = False
     for mode, title in CONDITION_TITLES.items():
-        res_path = BASE_DIR / mode / "results.json"
+        res_path = dataset_dir / mode / "results.json"
         if not res_path.exists():
-            print(f"[skip] {res_path} not found")
-            continue
+            # Fall back to old flat layout (gsm8k pre-refactor)
+            res_path = BASE_DIR / mode / "results.json"
+            if not res_path.exists():
+                print(f"[skip] {dataset_dir / mode / 'results.json'} not found")
+                continue
 
         with open(res_path) as f:
             results = json.load(f)
 
-        out_path = BASE_DIR / f"loss_curves_{mode}.png"
-        plot_condition(results, out_path, title)
+        dataset_dir.mkdir(parents=True, exist_ok=True)
+        out_path = dataset_dir / f"loss_curves_{mode}.png"
+        full_title = f"{args.dataset.upper()} — {title}"
+        plot_condition(results, out_path, full_title)
         any_found = True
 
     if not any_found:
         print("No results found. Run loss_curve_experiment.py first.")
     else:
-        print(f"\nPlots saved to {BASE_DIR}/")
+        print(f"\nPlots saved to {dataset_dir}/")
 
 
 if __name__ == "__main__":
