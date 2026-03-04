@@ -8,3 +8,5 @@ vllm>=0.4.0
 tensorboard>=2.15.0
 openai>=1.0.0
 tqdm>=4.66.0
+matplotlib>=3.7.0
+seqeval>=1.2.2

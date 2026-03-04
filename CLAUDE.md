@@ -2,15 +2,6 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Environment
-
-All GPU work runs on `cn14-dgx` (4×A100 80GB). Connect via `ssh -p 4422 cn14-dgx`.
-The local and compute nodes share the same filesystem — scripts that don't need GPU can run locally.
-
-On cn14-dgx, sessions start via the `app` alias → apptainer container → `conda activate /dev/shm/vllm`. All Python commands below assume this environment is active. The `accelerate` and `python` executables are at `/dev/shm/vllm/bin/`.
-
-Primary tmux sessions: `claude` (training/eval), `vscode` (parallel training), `vllm` (vLLM server), `tensor` (TensorBoard).
-
 ## Common Commands
 
 ### Evaluate ICL gap (before training)
